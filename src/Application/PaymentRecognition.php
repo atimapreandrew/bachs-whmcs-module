@@ -139,8 +139,7 @@ class PaymentRecognition
                 if (!$checkout || $d['currency'] !== 'USD' || !isset($d['allocation_policy']) || $d['allocation_policy'] !== 'verified_checkout_base_v1') {
                     return $this->hold($attempt, 'collection_currency_mismatch', $receipt);
                 }
-                $a->bridge->assertAcceptance('adaptive_pricing', $scope['data']['environment']);
-                $collectionPrecision = $a->bridge->collectionPrecision($payment['currency']);
+                $collectionPrecision = $a->settings->collectionPrecision($payment['currency']);
                 if (!isset($payment['amount_remaining']) || Money::compare($payment['amount_remaining'], '0', $collectionPrecision) !== 0) {
                     return $this->hold($attempt, 'converted_receipt_incomplete', $receipt);
                 }
@@ -184,9 +183,10 @@ class PaymentRecognition
             if ($a->snapshot($invoice) !== $d['snapshot']) {
                 return $this->hold($attempt, 'invoice_changed_during_payment', $receipt);
             }
-            $a->bridge->assertAcceptance('collection', $scope['data']['environment']);
-            if ($scope['data']['environment'] === 'sandbox' && !$a->bridge->sandboxInvoice($attempt['invoice_id'])) {
-                return $this->hold($attempt, 'sandbox_invoice_not_designated', $receipt);
+            try {
+                $a->settings->assertEnvironment($scope['data']['environment']);
+            } catch (Failure $error) {
+                return $this->hold($attempt, $error->reason, $receipt);
             }
             $a->store->update('payments', $receipt['id'], array('fee' => $fee, 'collection_amount' => $paid, 'collection_currency' => $payment['currency']), 'posting');
             $a->bridge->post($attempt['invoice_id'], $receipt['data']['transaction_id'], Money::positive($d['amount'], $precision), $fee, $d['gateway']);

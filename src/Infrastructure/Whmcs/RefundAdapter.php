@@ -8,17 +8,11 @@ use Bachs\Whmcs\Domain\Money;
 
 class RefundAdapter
 {
-    private $api;
     private $bridge;
-    private $acceptance;
-    private $version;
 
-    public function __construct($api, $bridge, $acceptance, $version)
+    public function __construct($bridge)
     {
-        $this->api = $api;
         $this->bridge = $bridge;
-        $this->acceptance = $acceptance;
-        $this->version = $version;
     }
 
     public function finalize($refund, $payment)

@@ -48,9 +48,6 @@ class Checkout
             if ($save && (!$a->settings->get('saved_methods', false) || !in_array($invoice['currency'], array('USD', 'NGN'), true))) {
                 throw new Failure('saving_not_enabled');
             }
-            if ($save) {
-                $a->bridge->assertAcceptance('saved_methods', $scope['data']['environment']);
-            }
             $provider = $a->provider($scope);
             $client = $a->bridge->customer($clientId);
             $customerId = $a->customers->resolve($scope, $client, $provider);
@@ -60,7 +57,6 @@ class Checkout
             $minutes = max(1, min(1440, (int)$a->settings->get('expiry_minutes', 60)));
             $allocationPolicy = 'same_currency';
             if ($a->settings->get('adaptive_allocation', false) && $invoice['currency'] === 'USD') {
-                $a->bridge->assertAcceptance('adaptive_pricing', $scope['data']['environment']);
                 $allocationPolicy = 'verified_checkout_base_v1';
             }
             $attempt = $a->store->insert(

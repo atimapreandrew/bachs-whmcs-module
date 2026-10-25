@@ -30,7 +30,7 @@ class Refunds
         }
         $scope = $a->settings->scope($payment['scope']);
         $provider = $a->provider($scope);
-        $a->bridge->assertAcceptance('refunds', $scope['data']['environment']);
+        $a->settings->assertEnvironment($scope['data']['environment']);
         $lock = 'refund:' . $paymentId;
         $lease = $a->store->acquire($lock);
         try {

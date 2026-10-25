@@ -5,13 +5,11 @@ namespace Bachs\Whmcs\Infrastructure\Whmcs;
 /** Isolated native token contract; legacy versions retain module-owned controls. */
 class TokenAdapter
 {
-    private $api;
     private $settings;
     private $version;
 
-    public function __construct($api, $settings, $version)
+    public function __construct($settings, $version)
     {
-        $this->api = $api;
         $this->settings = $settings;
         $this->version = $version;
     }

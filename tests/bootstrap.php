@@ -55,8 +55,6 @@ class FakeWhmcs implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domai
     public $crashAfterPost = false;
     public $identity;
     public $version = '9.1.0';
-    public $sandbox = true;
-    public $accept = true;
     public function __construct()
     {
         $this->identity = new FakeIdentity();
@@ -75,20 +73,6 @@ class FakeWhmcs implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domai
     public function systemUrl()
     {
         return 'https://billing.example.invalid/subdir';
-    }
-    public function assertAcceptance($feature, $environment)
-    {
-        if (!$this->accept) {
-            throw new Failure('installation_acceptance_required');
-        }
-    }
-    public function sandboxInvoice($id)
-    {
-        return $this->sandbox;
-    }
-    public function collectionPrecision($currency)
-    {
-        return $currency === 'USDT_TRC20' ? 6 : 2;
     }
     public function assertGateway($gateway)
     {
@@ -243,6 +227,8 @@ function environment($database = 'sqlite::memory:')
     $settings->set('scope_sandbox', $scope['id']);
     $settings->set('environment', 'sandbox');
     $settings->set('enabled', true);
+    $settings->set('test_installation', true);
+    $settings->set('collection_precision', array('USDT_TRC20' => 6));
     $settings->saveSecret('signing_' . $scope['id'], 'synthetic_signing_secret_for_tests');
     $app = new Engine($store, $settings, $bridge, function ($s) use ($provider) {
         return $provider;

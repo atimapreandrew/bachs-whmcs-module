@@ -1,32 +1,25 @@
-# Security
+# Security and privacy
 
-This module has local security tests but has not had an independent security audit. Real Bachs and licensed WHMCS acceptance tests are still required before production use.
+Report security problems through [GitHub private reporting](https://github.com/atimapreandrew/bachs-whmcs-module/security/advisories/new) if enabled. Otherwise, open an issue asking for a private contact channel without posting vulnerability details. Never include keys, card tokens, customer records, or raw webhooks in a public issue.
 
-## Report a problem privately
+## Payment controls
 
-Use [GitHub's private vulnerability report](https://github.com/atimapreandrew/bachs-whmcs-module/security/advisories/new) if it is available. If it is not enabled, open an issue asking the maintainer for a private reporting channel. Do not include vulnerability details in that public request. No separate security email address is published.
+The module checks HTTPS certificates, fixed API hosts, signed webhook bytes/timestamps, merchant scope, invoice ownership, exact money, and native permissions. Protected actions use WHMCS CSRF checks. Unknown writes are retained for review, and duplicate accounting is guarded by stored identities, locks, and native transaction lookup.
 
-Never post API keys, signing secrets, full card tokens, customer data, or raw webhook bodies in an issue or pull request.
+Raw card/OTP entry stays at Bachs. Saved methods require client consent and ownership checks. Card saving and automatic collection start disabled. Sandbox payments require explicit confirmation that the installation is a test site.
 
-## Main controls
+API/signing keys, provider card tokens, saved requests, and resumable checkout URLs are encrypted. Portal URLs are never stored. Staff access follows WHMCS addon access and native permissions. Record views and diagnostic exports hide sensitive fields.
 
-- The API client uses fixed Bachs hosts, HTTPS certificate checks, TLS 1.2, no redirects, bounded timeouts, and a response-size limit.
-- Webhooks are checked against the exact received bytes, a timestamp, and the correct merchant/environment. Invalid V2 signatures cannot fall back to legacy verification.
-- Client actions require login, billing-account permission, and native WHMCS CSRF checks. Staff actions require addon access and the matching native/module permission.
-- Money stays in exact decimal strings. A browser result, missing amount, underpayment, or unknown provider state cannot mark an invoice paid.
-- Provider writes are saved before sending. Unknown results are reviewed instead of retried as a new charge. Saved requests keep their original merchant and retry key.
-- Unique payment identities, invoice locks, stable native transaction IDs, and transaction lookup protect against duplicate accounting.
-- Keys, card tokens, saved requests, and checkout URLs are encrypted. The customer portal URL is never stored. Record views and exports hide sensitive fields.
-- Public pages escape text. Database values use bound parameters. Signed notifications are size limited and queued before acknowledgment.
+## Stored data
 
-## Server setup
+Customer creation sends the billing client's name/email and payment details needed by Bachs. The module does not sync service passwords, tickets, or unrelated profile fields. Local records retain invoice/client links, payment identities, amounts, statuses, consent, and accounting/audit evidence. Webhook records keep selected fields and a body digest rather than the full payload.
 
-Keep the private test profile and any dedicated encryption key outside the web root. Protect both with server access controls and secure backups. Web PHP and cron must use the same configuration. Database encryption does not protect against a server compromise that exposes the key too.
+Cleanup removes expired confirmations/rate counters and old terminal checkout links. Financial history is retained. Client deletion revokes local card credentials without deleting provider financial records. Deactivation does not purge data or cancel/refund external money automatically. Set retention rules before any separately authorized deletion.
 
-Block web access to `modules/gateways/bachs/lib/` and `modules/gateways/bachs/bin/`. Apache rules ship in the installation ZIP; configure the equivalent for other servers. The worker also rejects non-CLI requests. Do not add a public HTTP cron endpoint.
+## Server care
 
-Keep WHMCS, PHP, cURL/OpenSSL, certificates, and the web server patched. A legacy syntax target does not permit disabling HTTPS, signatures, permissions, or encryption. Test version changes before enabling payments again.
+Protect the private library, CLI folder, logs, and optional encryption key. Keep web and cron configuration consistent, back up keys, and patch WHMCS/PHP/OpenSSL/cURL. Do not disable signatures or certificate checks to fix an integration error. Hosted card entry does not establish PCI compliance by itself.
 
-Check worker gaps, signature failures, and review items. The callback uses `REMOTE_ADDR` for rate limits and does not trust arbitrary forwarded headers. Set proxy/WAF rules to allow legitimate provider bursts without collecting attack payloads.
+This release has local tests but no independent security audit or verified live WHMCS/Bachs acceptance. Test on a separate site before production use.
 
-Hosted card entry keeps raw card details out of this module. It does not establish the merchant's PCI compliance by itself.
+Bachs and WHMCS are separate products under their own terms. No third-party runtime library is bundled. Overlay checkout loads Bachs's own SDK only when needed. Product names identify integration targets and imply no endorsement.

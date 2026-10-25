@@ -1,8 +1,0 @@
-{
-    "passed": 113,
-    "failed": 0,
-    "assertions": 305,
-    "php": "8.4.2",
-    "database": "SQLite 3.53.2",
-    "type": "synthetic, not licensed WHMCS\/provider acceptance"
-}

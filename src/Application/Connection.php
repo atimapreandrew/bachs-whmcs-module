@@ -49,15 +49,10 @@ class Connection
         if ($scope && $scope['data']['generation'] !== $generation) {
             $a->settings->saveSecret('generation_' . $scope['id'] . '_' . $scope['data']['generation'], $a->settings->secret('key_' . $scope['id']));
         }
-        $methods = $provider->request('GET', '/v1/payment-methods');
-        $checkout = $provider->request('GET', '/v1/accounts/checkout/settings');
         $scope = $a->store->put('merchant_scopes', '', $scopeKey, array('installation' => $installation,
             'environment' => $environment, 'organization' => $organization, 'account' => $account, 'generation' => $generation,
             'verified_at' => $a->store->clock->now(), 'name' => isset($me['name']) ? substr($me['name'], 0, 128) : 'Merchant',
-            'enabled_methods' => isset($me['enabled_payment_methods']) ? $me['enabled_payment_methods'] : array(),
-            'capabilities' => isset($me['capabilities']) ? $me['capabilities'] : array(),
-            'methods' => $a->settings->secrets->seal(json_encode($methods)),
-            'checkout_settings' => $a->settings->secrets->seal(json_encode($checkout))), 'bound');
+            ), 'bound');
         $a->settings->saveSecret('key_' . $scope['id'], $key);
         $a->settings->set('scope_' . $environment, $scope['id']);
         $a->store->audit($actor, 'merchant_connection_verified', $scope['id'], $scope['id'], array('environment' => $environment));
@@ -84,9 +79,25 @@ class Connection
         if (!is_array($currencies) || !$currencies || array_diff($currencies, array('USD','NGN','GHS','KES','MWK','TZS','UGX','ZMW'))) {
             throw new Failure('currency_precision_gate');
         }
+        if (isset($input['button_label']) && !is_string($input['button_label'])) {
+            throw new Failure('invalid_button_label');
+        }
         $label = isset($input['button_label']) ? trim($input['button_label']) : 'Pay with Bachs';
         if (strlen($label) < 3 || strlen($label) > 80) {
             throw new Failure('invalid_button_label');
+        }
+        $precisions = array();
+        if (isset($input['collection_precision']) && (!is_string($input['collection_precision']) || strlen($input['collection_precision']) > 8192)) {
+            throw new Failure('invalid_collection_precision');
+        }
+        $precisionInput = isset($input['collection_precision']) ? trim($input['collection_precision']) : '';
+        if ($precisionInput !== '') {
+            foreach (preg_split('/[\r\n,]+/', $precisionInput) as $entry) {
+                if (!preg_match('/^([A-Z][A-Z0-9_]{1,31})=([0-9]|1[0-8])$/D', trim($entry), $match)) {
+                    throw new Failure('invalid_collection_precision');
+                }
+                $precisions[$match[1]] = (int)$match[2];
+            }
         }
         $enabled = !empty($input['enabled']);
         if ($enabled) {
@@ -100,13 +111,17 @@ class Connection
             if ($a->store->clock->now() - $a->settings->get('last_worker', 0) > 900) {
                 throw new Failure('worker_not_healthy');
             }
-            $a->bridge->assertAcceptance('collection', $environment);
+            if ($environment === 'sandbox' && empty($input['test_installation'])) {
+                throw new Failure('sandbox_installation_confirmation_required');
+            }
         }
         foreach (
             array('environment' => $environment, 'checkout_mode' => $mode, 'methods' => array_values($methods),
             'currencies' => array_values($currencies), 'button_label' => $label, 'enabled' => $enabled,
             'saved_methods' => !empty($input['saved_methods']), 'draining' => !empty($input['draining']),
             'adaptive_allocation' => !empty($input['adaptive_allocation']),
+            'automatic_payments' => !empty($input['automatic_payments']) && !empty($input['saved_methods']),
+            'test_installation' => !empty($input['test_installation']), 'collection_precision' => $precisions,
             'expiry_minutes' => max(1, min(1440, isset($input['expiry_minutes']) ? (int)$input['expiry_minutes'] : 60))) as $key => $value
         ) {
             $a->settings->set($key, $value);
@@ -134,26 +149,5 @@ class Connection
         }
         $a->settings->saveSecret('signing_' . $scope['id'], $secret);
         $a->store->audit($actor, 'webhook_secret_saved', $scope['id'], $scope['id']);
-    }
-
-    public function webhookPreview($scope, $actor)
-    {
-        $body = array('url' => $this->app->bridge->systemUrl() . '/modules/gateways/callback/bachs.php?environment=' . $scope['data']['environment'],
-            'name' => 'WHMCS ' . substr($scope['data']['installation'], 0, 8), 'event_types' => Webhooks::$events, 'event_source' => 'account');
-        return (new Confirmations($this->app))->preview($scope, $actor, 'webhook_create', $body);
-    }
-
-    public function createWebhook($scope, $actor, $confirmation)
-    {
-        $a = $this->app;
-        $p = (new Confirmations($a))->consume($scope, $actor, 'webhook_create', $confirmation);
-        $op = $a->operations->prepare($scope, 'webhook_endpoint:' . $scope['id'], 'POST', '/v1/webhooks/endpoints', $p['body']);
-        $r = $a->operations->send($op, $scope, $a->provider($scope));
-        if (!isset($r['endpoint_id'], $r['signing_secret'])) {
-            throw new Failure('webhook_endpoint_contract_mismatch');
-        }
-        $this->signing($scope, $r['signing_secret'], $actor);
-        $a->settings->set('endpoint_' . $scope['id'], $r['endpoint_id']);
-        return array('endpoint_id' => $r['endpoint_id']);
     }
 }

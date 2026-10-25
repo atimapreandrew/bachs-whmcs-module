@@ -3,14 +3,12 @@
 namespace Bachs\Whmcs\Infrastructure\Whmcs;
 
 use Bachs\Whmcs\Domain\Failure;
-use Bachs\Whmcs\Domain\Ids;
 use Bachs\Whmcs\Domain\Money;
 
 class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\PaymentPoster, \Bachs\Whmcs\Domain\RefundFinalizer
 {
     public $api;
     public $identity;
-    public $acceptance;
     public $version;
     private $root;
     private $pdo;
@@ -26,8 +24,7 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
         if (version_compare($this->version, '7.0', '<')) {
             throw new Failure('whmcs_version_not_supported');
         }
-        $this->acceptance = new Acceptance(getenv('BACHS_ACCEPTANCE_FILE'), $root);
-        $this->identity = new Identity($api, $settings);
+        $this->identity = new Identity($api);
     }
 
     public function invoice($id)
@@ -56,7 +53,7 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
         $items = isset($r['items']['item']) ? $r['items']['item'] : array();
         foreach ($items as $item) {
             if (isset($item['type']) && in_array($item['type'], array('AddFunds','Invoice'), true)) {
-                $this->assertAcceptance('special_invoices', $this->settings->get('environment', 'sandbox'));
+                throw new Failure('special_invoice_not_supported');
             }
         }
         return array('invoice_id' => (int)$r['invoiceid'], 'client_id' => (int)$r['userid'], 'status' => $r['status'],
@@ -77,21 +74,6 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
     {
         $url = isset($GLOBALS['CONFIG']['SystemURL']) ? $GLOBALS['CONFIG']['SystemURL'] : '';
         return \Bachs\Whmcs\Infrastructure\Bachs\Urls::system($url);
-    }
-
-    public function assertAcceptance($feature, $environment)
-    {
-        $this->acceptance->assertFeature($feature, $environment, $this->version);
-    }
-
-    public function sandboxInvoice($id)
-    {
-        return $this->acceptance->sandboxInvoice($id);
-    }
-
-    public function collectionPrecision($currency)
-    {
-        return $this->acceptance->collectionPrecision($currency);
     }
 
     public function assertGateway($gateway)
@@ -170,17 +152,16 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
 
     public function enrollMethod($method)
     {
-        $environment = $this->settings->scope($method['scope'])['data']['environment'];
-        if (version_compare($this->version, '7.8', '<') || !$this->acceptance->has('native_card', $environment, $this->version)) {
+        if (version_compare($this->version, '7.9', '<') || !$this->settings->get('automatic_payments', false) || !$this->settings->get('saved_methods', false)) {
             return;
         }
         require_once $this->root . '/includes/gatewayfunctions.php';
         require_once $this->root . '/includes/invoicefunctions.php';
-        (new TokenAdapter($this->api, $this->settings, $this->version))->enroll($method);
+        (new TokenAdapter($this->settings, $this->version))->enroll($method);
     }
 
     public function finalizeRefund($refund, $payment)
     {
-        return (new RefundAdapter($this->api, $this, $this->acceptance, $this->version))->finalize($refund, $payment);
+        return (new RefundAdapter($this))->finalize($refund, $payment);
     }
 }

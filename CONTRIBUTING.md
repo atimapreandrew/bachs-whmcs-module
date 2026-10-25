@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for helping improve Bachs for WHMCS. Keep changes focused on WHMCS payments.
+Keep changes focused on WHMCS payments. For a large change, open an issue first. Pull requests should explain the problem, the change, and the tests run.
 
-## Set up locally
+## Build and test
 
-Clone the repository. Use PHP 8.2 or newer with PDO SQLite, SQLite3, OpenSSL, and pcntl, Node.js, Python 3.9 or newer, and Make. The race test uses pcntl, so run it on Linux, macOS, or WSL. No real API key, WHMCS license, Composer install, or npm install is needed for the local tests.
+Use PHP 8.2 or newer with PDO SQLite, SQLite3, OpenSSL, and pcntl; Node.js; Python 3.9 or newer; and Make. Linux, macOS, or WSL is needed for the process-race test. These are development tools, not WHMCS server requirements. No Composer/npm install or real API key is needed for local tests.
 
 ```sh
 make test
@@ -12,33 +12,17 @@ make check
 make package
 ```
 
-`make test` runs PHP and client JavaScript tests. `make check` checks syntax, selected security rules, documentation links, and the old-PHP syntax target. `make package` runs those checks, then builds and checks the installation ZIP. Generated files stay in `dist/` and are not committed.
-
-Run these commands locally before submitting a change. GitHub Actions is optional and is not included in this repository. Local tests do not prove licensed WHMCS or real Bachs compatibility.
+The package is written to `dist/bachs-whmcs-1.0.0.zip`, with a checksum file. Upload that package's contents to WHMCS, not the source checkout. Generated files are ignored by Git. No GitHub workflow is required.
 
 ## Code rules
 
-- Use four spaces, clear names, and simple English comments that explain important decisions.
-- Keep shipped PHP within the PHP 5.6 syntax target. Modern PHP is allowed in development-only tests and tools.
-- Keep WHMCS-specific behavior in `src/Infrastructure/Whmcs/` and provider transport in `src/Infrastructure/Bachs/`.
-- Keep amounts as exact decimal strings. Never use floats for payment decisions.
-- Save an operation before sending a provider write. Reuse its request and retry key. An unknown result needs a status check, not a new charge.
-- Send all incoming payment paths through `PaymentRecognition`. Search for the existing native transaction before recording money.
-- Use native WHMCS helpers for accounting. Do not write to WHMCS financial tables directly.
-- Require permission checks and native CSRF checks for protected actions.
-- Keep keys, tokens, private URLs, customer records, and real webhook bodies out of source, tests, logs, and issues.
-- Do not add merchant payout tools, split payments, or a separate subscription system.
+- Use clear names, four spaces, and simple English.
+- Keep shipped PHP within the PHP 5.6 syntax target; use the PHP version required by WHMCS at runtime.
+- Keep money as exact decimal strings, never floats.
+- Save provider writes before sending them. Check an unknown result instead of starting a replacement charge.
+- Route payment recognition through the shared service and use native WHMCS accounting helpers.
+- Preserve webhook signatures, invoice ownership, staff permissions, CSRF, encryption, and consent checks.
+- Add focused tests for changes to money, permissions, retries, or provider fields.
+- Keep secrets and real customer data out of code, fixtures, logs, and issues.
 
-## Submit a change
-
-Open an issue for a large change first. For a pull request, explain the user-visible problem, what changes, and how you tested it. Add a focused test when changing money handling, access controls, retry behavior, or provider fields. Update the relevant guide if setup or behavior changes.
-
-Read the [code guide](docs/architecture.md), [API notes](docs/provider-contract.md), and [test status](docs/test-report.md) before changing payment flows. Check current official API documentation instead of guessing an endpoint or response field.
-
-## Test a real installation
-
-Use a separate licensed WHMCS test site and a Bachs sandbox account. Follow the [installation guide](docs/installation.md) and [acceptance plan](docs/test-report.md). Keep resource IDs and customer evidence private. Public test reports should state exact versions, scenarios, and results without secrets.
-
-## License
-
-By submitting code, you agree that your contribution may be used under this project's [MIT license](LICENSE.txt).
+See the [developer guide](docs/development.md) for the code map and test limits. Contributions use this project's [MIT license](LICENSE.txt).

@@ -12,7 +12,7 @@ function bachs_card_MetaData()
 function bachs_card_config()
 {
     return array('FriendlyName' => array('Type' => 'System', 'Value' => 'Bachs saved card'),
-        'setupInfo' => array('FriendlyName' => 'Setup', 'Type' => 'text', 'Size' => '0', 'Description' => 'Activate only after the native-card adapter acceptance checks. Configure shared credentials in Addons > Bachs.'));
+        'setupInfo' => array('FriendlyName' => 'Setup', 'Type' => 'text', 'Size' => '0', 'Description' => 'Enable optional automatic card payments in Addons > Bachs and test them before live use. Shared credentials are managed in the addon.'));
 }
 function bachs_card_capture($params)
 {
@@ -34,7 +34,8 @@ function bachs_card_remoteinput($params)
 {
     try {
         $app = \Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app();
-        $app->bridge->assertAcceptance('native_card', $app->settings->get('environment', 'sandbox'));
+        $app->assertCardBilling();
+        $app->settings->assertEnvironment($app->settings->activeScope()['data']['environment']);
         $url = $app->bridge->systemUrl() . '/index.php?m=bachs_admin';
         // No card fields are ever rendered by this gateway. Hosted setup requires explicit consent.
         return '<form action="' . \Bachs\Whmcs\Infrastructure\SafeData::html($url) . '" method="get" target="_top"><input type="hidden" name="m" value="bachs_admin"><button type="submit">Manage cards securely with Bachs</button></form>';

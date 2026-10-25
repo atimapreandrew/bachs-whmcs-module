@@ -14,21 +14,22 @@ class Messages
             'client_payment_access_denied' => 'You do not have permission to manage payments for this billing account.',
             'invoice_access_denied' => 'You do not have access to this invoice.',
             'currency_not_enabled' => 'Bachs is unavailable for this invoice currency. Choose another payment method.',
-            'sandbox_invoice_not_designated' => 'This invoice is not designated for sandbox testing.',
+            'sandbox_installation_confirmation_required' => 'Confirm this is a separate test installation before enabling sandbox payments.',
+            'automatic_payments_disabled' => 'Automatic card payments are disabled in Bachs settings.',
+            'native_card_version_not_supported' => 'Automatic card payments require WHMCS 7.9 or later.',
+            'native_currency_conversion_gate' => 'Turn off Convert To For Processing for the Bachs gateway.',
+            'special_invoice_not_supported' => 'Bachs does not support add-funds or mass-payment invoices.',
+            'invalid_collection_precision' => 'Enter currency precision as CODE=decimal places, for example USDT_TRC20=6.',
             'partial_refund_currency_unproven' => 'The settlement currency has not been verified for a partial refund. Refresh reconciliation or request a full refund.',
             'payment_not_refundable' => 'Bachs does not currently allow a refund of this payment.',
             'refund_rail_not_supported' => 'This payment method requires an externally processed reimbursement.',
             'confirmation_invalid_or_expired' => 'This confirmation expired. Review the current payment details again.',
-            'merchant_migration_confirmation_required' => 'This key belongs to a different merchant. Use the reviewed merchant-migration procedure.',
-            'installation_acceptance_required' => 'Complete this installation’s sandbox and WHMCS acceptance checks. See the installation guide.',
+            'merchant_migration_confirmation_required' => 'This key belongs to a different merchant. Restore the original key and contact the maintainer before changing merchants.',
             'worker_not_healthy' => 'Run the Bachs CLI worker or WHMCS cron, then enable payments.',
             'merchant_not_connected' => 'Connect a Bachs merchant account in Addons > Bachs.',
             'webhook_secret_required' => 'Save a webhook signing secret before enabling payments.');
         if (isset($messages[$code])) {
             return $messages[$code];
-        }
-        if (strpos($code, '_acceptance_required') !== false) {
-            return 'This capability needs installation-specific acceptance evidence before it can be enabled.';
         }
         return 'The request could not be completed. Recheck its status before trying again. Support reference: ' . preg_replace('/[^a-zA-Z0-9_]/', '', $code);
     }

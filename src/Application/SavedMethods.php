@@ -127,7 +127,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
         if (!$a->settings->get('saved_methods', false) || !$a->settings->get('enabled', false) || $a->settings->get('draining', false)) {
             throw new Failure('saving_not_enabled');
         }
-        $a->bridge->assertAcceptance('saved_methods', $scope['data']['environment']);
+        $a->settings->assertEnvironment($scope['data']['environment']);
         $lock = 'card_setup:' . $scope['id'] . ':' . (int)$clientId;
         $lease = $a->store->acquire($lock);
         try {
@@ -178,7 +178,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
         $lease = $a->store->acquire($lock);
         try {
             $invoice = $a->bridge->invoice($invoiceId);
-            $a->ready($scope, $invoice, 'native_card');
+            $a->ready($scope, $invoice, true);
             if ($invoice['gateway'] !== 'bachs_card' || !$a->settings->get('saved_methods', false)) {
                 throw new Failure('capture_not_enabled');
             }

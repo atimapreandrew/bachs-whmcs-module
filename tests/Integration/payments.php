@@ -44,17 +44,17 @@ test('Checkout denies cross-client invoice IDs and paid invoices', function () {
     });
     same(0, $p->writes('/v1/checkout-sessions'));
 });
-test('Sandbox mode cannot settle an ordinary undesignated invoice', function () {
+test('Sandbox collection requires explicit test-installation confirmation', function () {
     list($a,$p,$w) = environment();
-    $w->sandbox = false;
-    fails('sandbox_invoice_not_designated', function () use ($a) {
+    $a->settings->set('test_installation', false);
+    fails('sandbox_installation_confirmation_required', function () use ($a) {
         beginPayment($a);
     });
 });
-test('Missing acceptance evidence disables new financial actions', function () {
+test('Disabled payment settings stop new collections', function () {
     list($a,$p,$w) = environment();
-    $w->accept = false;
-    fails('installation_acceptance_required', function () use ($a) {
+    $a->settings->set('enabled', false);
+    fails('gateway_disabled', function () use ($a) {
         beginPayment($a);
     });
     same(0, $p->writes('/v1/checkout-sessions'));
@@ -395,6 +395,7 @@ test('Saving consent, encrypted token enrollment, revocation and pending capture
     $w->invoices[43]['invoice_id'] = 43;
     $w->invoices[43]['status'] = 'Unpaid';
     $w->invoices[43]['balance'] = '100.00';
+    $a->settings->set('automatic_payments', true);
     $first = (new SavedMethods($a))->capture(43, $method['id']);
     $second = (new SavedMethods($a))->capture(43, $method['id']);
     same('pending', $first['status']);

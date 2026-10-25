@@ -63,8 +63,8 @@ def main():
                 errors.append('Missing required file: ' + name)
 
         manifest = json.loads(archive.read(library_path + 'release.json'))
-        if manifest.get('profile') != 'universal' or manifest.get('target_whmcs') != '7.0–9.1':
-            errors.append('Incorrect universal package target metadata')
+        if manifest.get('version') != VERSION or manifest.get('target_whmcs') != '7.0–9.1':
+            errors.append('Incorrect package version or target metadata')
         for name, expected in manifest['components'].items():
             if hashlib.sha256(archive.read(name)).hexdigest() != expected:
                 errors.append('Component hash mismatch: ' + name)
@@ -91,14 +91,15 @@ def main():
         if status or output != 'blocked':
             errors.append('Partial upload was not blocked: ' + error)
 
-    release = json.loads((DIST / 'release-manifest.json').read_text())
-    if len(release['packages']) != 1:
-        errors.append('A release must contain exactly one package')
     if sorted(path.name for path in DIST.glob('*.zip')) != [archive_name]:
         errors.append('Unexpected extra ZIP files')
-    for package in release['packages']:
-        if digest(DIST / package['file']) != package['sha256']:
-            errors.append('ZIP checksum mismatch: ' + package['file'])
+    expected_checksums = f'{digest(archive_path)}  {archive_name}\n'
+    if (DIST / 'SHA256SUMS').read_text() != expected_checksums:
+        errors.append('ZIP checksum mismatch')
+    if any('/docs/' in name and not name.endswith(('installation.md', 'development.md')) for name in names):
+        errors.append('Old development paperwork shipped')
+    if library_path + 'src/Infrastructure/Whmcs/Acceptance.php' in names:
+        errors.append('Removed private acceptance-file gate shipped')
 
     if errors:
         print('\n'.join(errors))

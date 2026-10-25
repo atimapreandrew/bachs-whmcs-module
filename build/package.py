@@ -40,20 +40,19 @@ spl_autoload_register(function ($class) {
     (library / '.htaccess').write_text(deny)
     (base / 'bin/.htaccess').write_text(deny)
     for folder in ('lib','bin'): (base / folder / 'index.php').write_text("<?php\nhttp_response_code(403); exit('Access denied');\n")
-    for name in ('README.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','LICENSE.txt','THIRD_PARTY_NOTICES.md'):
+    for name in ('README.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','LICENSE.txt'):
         shutil.copy2(ROOT / name, base / name)
-    shutil.copytree(ROOT / 'docs', base / 'docs')
+    (base / 'docs').mkdir()
+    for name in ('installation.md', 'development.md'):
+        shutil.copy2(ROOT / 'docs' / name, base / 'docs' / name)
     components = {str(p.relative_to(target)): digest(p) for p in files(target) if p.suffix == '.php' and library not in p.parents}
-    manifest = dict(version=VERSION, profile='universal', release_status='release_candidate_not_production_verified',
-                    latest_whmcs_reference='9.1.0', source_commit=source_commit(),
-                    source_tree_sha256=source_digest(), build_date='2026-10-25',
-                    target_whmcs='7.0–9.1',
-                    runtime_syntax_floor='PHP 5.6', licensed_whmcs_tests='not_run', provider_sandbox_tests='not_run',
-                    components=components, classes={str(p.relative_to(library / 'src')):digest(p) for p in files(library / 'src')},
-                    dependencies=[], required_extensions=['curl','openssl','json','pdo_mysql'])
-    (library / 'release.json').write_text(json.dumps(manifest,indent=2)+'\n')
-    sbom={'bomFormat':'CycloneDX','specVersion':'1.5','version':1,'metadata':{'component':{'type':'application','name':'bachs-whmcs','version':VERSION}},'components':[]}
-    (base / 'sbom.json').write_text(json.dumps(sbom,indent=2)+'\n')
+    manifest = dict(
+        version=VERSION, release_status='release_candidate',
+        source_commit=source_commit(), source_tree_sha256=source_digest(),
+        runtime_syntax_floor='PHP 5.6', target_whmcs='7.0–9.1',
+        components=components,
+        classes={str(path.relative_to(library / 'src')): digest(path) for path in files(library / 'src')})
+    (library / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
     archive = DIST / f'bachs-whmcs-{VERSION}.zip'
     with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for path in files(target):
@@ -62,8 +61,12 @@ spl_autoload_register(function ($class) {
     return archive
 
 def source_commit():
-    p=subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True)
-    return p.stdout.strip() if p.returncode==0 else None
+    status = subprocess.run(['git', 'status', '--porcelain'], cwd=ROOT, capture_output=True, text=True)
+    if status.returncode or status.stdout.strip():
+        return None
+    commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
+    return commit.stdout.strip() if commit.returncode == 0 else None
+
 def source_digest():
     h=hashlib.sha256()
     for name in ('src','modules','includes','resources'):
@@ -73,6 +76,10 @@ def main():
     DIST.mkdir(exist_ok=True)
     paths=[assemble()]
     (DIST/'SHA256SUMS').write_text(''.join(f'{digest(p)}  {p.name}\n' for p in paths))
-    (DIST/'release-manifest.json').write_text(json.dumps({'version':VERSION,'source_commit':source_commit(),'source_tree_sha256':source_digest(),'release_status':'release_candidate_not_production_verified','packages':[{ 'file':p.name,'sha256':digest(p),'bytes':p.stat().st_size} for p in paths]},indent=2)+'\n')
+    # These files belonged to the earlier development package layout.
+    for obsolete in ('release-manifest.json',):
+        path = DIST / obsolete
+        if path.exists():
+            path.unlink()
     print('\n'.join(str(p.relative_to(ROOT)) for p in paths))
 if __name__=='__main__':main()

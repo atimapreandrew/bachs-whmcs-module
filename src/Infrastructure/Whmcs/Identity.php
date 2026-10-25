@@ -7,15 +7,13 @@ use Bachs\Whmcs\Domain\Failure;
 class Identity implements \Bachs\Whmcs\Domain\IdentityResolver
 {
     private $api;
-    private $settings;
     public static $permissions = array('view_payments' => 'List Transactions', 'manage_settings' => 'Configure Payment Gateways',
         'manage_webhooks' => 'Configure Payment Gateways', 'request_refunds' => 'Refund Invoice Payments',
         'finalize_refund_accounting' => 'Refund Invoice Payments', 'view_diagnostics' => 'View Gateway Log', 'export_diagnostics' => 'Client Data Export');
 
-    public function __construct(LocalApi $api, $settings)
+    public function __construct(LocalApi $api)
     {
         $this->api = $api;
-        $this->settings = $settings;
     }
 
     public function client($clientId = null)
@@ -65,13 +63,6 @@ class Identity implements \Bachs\Whmcs\Domain\IdentityResolver
         $details = $this->api->call('GetAdminDetails', array(), $row->username);
         if ((int)$details['adminid'] !== (int)$row->id || !in_array(self::$permissions[$capability], explode(',', $details['allowedpermissions']), true)) {
             throw new Failure('action_permission_denied');
-        }
-        $nativeOnly = array('view_payments','view_diagnostics','manage_settings','manage_webhooks');
-        if (!in_array($capability, $nativeOnly, true)) {
-            $roles = $this->settings->get('roles', array());
-            if (!isset($roles[$capability]) || !in_array((int)$row->roleid, array_map('intval', $roles[$capability]), true)) {
-                throw new Failure('module_role_permission_denied');
-            }
         }
         return array('id' => (int)$row->id, 'role_id' => (int)$row->roleid, 'actor' => 'admin:' . (int)$row->id);
     }

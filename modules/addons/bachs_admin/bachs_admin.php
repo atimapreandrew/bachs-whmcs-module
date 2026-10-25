@@ -34,7 +34,7 @@ function bachs_admin_activate()
         if (!hash_equals($probe, $app->settings->secrets->open($app->settings->secrets->seal($probe)))) {
             throw new RuntimeException('Encryption round trip failed');
         }
-        return array('status' => 'success', 'description' => 'Bachs installed. Assign addon role access, connect your merchant account, configure signed webhooks and complete sandbox acceptance. New collections start disabled.');
+        return array('status' => 'success', 'description' => 'Bachs installed. Assign addon role access, connect your merchant account, configure signed webhooks and test sandbox payments. New collections start disabled.');
     } catch (Exception $e) {
         return array('status' => 'error', 'description' => 'Bachs activation could not complete. Check PHP extensions, private encryption configuration and the legacy API execution identity. Financial records were preserved.');
     }

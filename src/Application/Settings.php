@@ -65,9 +65,31 @@ class Settings
         return new \Bachs\Whmcs\Infrastructure\Bachs\Client($scope['data']['environment'], $this->secret('key_' . $scope['id']), $scope['data']['account']);
     }
 
+    public function assertEnvironment($environment)
+    {
+        if (!in_array($environment, array('sandbox', 'live'), true)) {
+            throw new Failure('invalid_environment');
+        }
+        if ($environment === 'sandbox' && !$this->get('test_installation', false)) {
+            throw new Failure('sandbox_installation_confirmation_required');
+        }
+    }
+
+    public function collectionPrecision($currency)
+    {
+        $custom = $this->get('collection_precision', array());
+        if (isset($custom[$currency]) && is_int($custom[$currency]) && $custom[$currency] >= 0 && $custom[$currency] <= 18) {
+            return $custom[$currency];
+        }
+        if (in_array($currency, array('USD', 'NGN', 'GHS', 'KES', 'MWK', 'TZS', 'UGX', 'ZMW'), true)) {
+            return 2;
+        }
+        throw new Failure('collection_precision_unknown');
+    }
+
     public function precision($currency)
     {
-        // Zero-decimal corridors require separate verified wire/storage fixtures before release.
+        // Only supported two-decimal invoice currencies can enter native accounting.
         $known = array('USD','NGN','GHS','KES','MWK','TZS','UGX','ZMW');
         if (!in_array($currency, $known, true)) {
             throw new Failure('currency_precision_gate');

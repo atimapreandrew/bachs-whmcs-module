@@ -10,8 +10,8 @@ use Bachs\Whmcs\Domain\Failure;
 class AdminActions
 {
     private $app;
-    public static $permissions = array('connect' => 'manage_settings', 'settings' => 'manage_settings', 'roles' => 'manage_settings',
-        'signing' => 'manage_webhooks', 'webhook_preview' => 'manage_webhooks', 'webhook_confirm' => 'manage_webhooks',
+    public static $permissions = array('connect' => 'manage_settings', 'settings' => 'manage_settings',
+        'signing' => 'manage_webhooks',
         'replay' => 'manage_webhooks', 'recheck' => 'view_payments', 'refund_preview' => 'request_refunds', 'refund_confirm' => 'request_refunds',
         'refund_recheck' => 'finalize_refund_accounting', 'refund_map' => 'finalize_refund_accounting', 'resolve' => 'view_payments', 'revoke' => 'manage_settings',
         'export' => 'export_diagnostics');
@@ -33,7 +33,7 @@ class AdminActions
         (new RateLimit($a->store))->check('admin:' . $actor['id'], 40);
         $who = $actor['actor'];
         $scope = null;
-        if (!in_array($action, array('connect','settings','roles','export'), true)) {
+        if (!in_array($action, array('connect','settings','export'), true)) {
             $scopeId = Input::text($input, 'scope_id', '', 48);
             $scope = $scopeId ? $a->settings->scope($scopeId) : $a->settings->activeScope();
         }
@@ -47,28 +47,9 @@ class AdminActions
             (new Connection($a))->save($input, $who);
             return array('message' => 'Settings saved.');
         }
-        if ($action === 'roles') {
-            $roles = array();
-            foreach (\Bachs\Whmcs\Infrastructure\Whmcs\Identity::$permissions as $cap => $unused) {
-                $csv = Input::text($input, 'role_' . $cap, '', 500);
-                if ($csv !== '' && !preg_match('/^[0-9]+(?:,[0-9]+)*$/D', $csv)) {
-                    throw new Failure('invalid_role_map');
-                }
-                $roles[$cap] = $csv === '' ? array() : array_map('intval', explode(',', $csv));
-            }
-            $a->settings->set('roles', $roles);
-            $a->store->audit($who, 'role_map_changed', '', 'roles');
-            return array('message' => 'Action permissions saved.');
-        }
         if ($action === 'signing') {
             (new Connection($a))->signing($scope, Input::text($input, 'signing_secret', '', 512), $who);
             return array('message' => 'Signing secret saved. Existing secrets remain masked.');
-        }
-        if ($action === 'webhook_preview') {
-            return $this->preview((new Connection($a))->webhookPreview($scope, $who), 'webhook_confirm');
-        }
-        if ($action === 'webhook_confirm') {
-            return array('message' => 'Webhook endpoint registered.', 'data' => (new Connection($a))->createWebhook($scope, $who, $confirmation));
         }
         if ($action === 'replay') {
             $event = $a->store->get('webhook_events', $target);

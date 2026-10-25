@@ -78,7 +78,7 @@ class AdminView
         }
         $s .= '<div class="bachs-nav-foot">Independent integration<br>Version 1.0.0 · RC</div></nav><main class="bachs-main"><div class="bachs-page-heading"><div><p class="bachs-eyebrow">Payment operations</p><h1>' . $this->h(self::$pages[$page]) . '</h1></div><span class="bachs-muted">' . ($this->scope ? $this->h($this->scope['data']['name']) : 'Connect your merchant account') . '</span></div>';
         if ($this->app->settings->get('environment', 'sandbox') === 'sandbox') {
-            $s .= '<div class="bachs-notice">Sandbox environment. Simulated funds may only settle isolated staging or designated test invoices.</div>';
+            $s .= '<div class="bachs-notice">Sandbox environment. Use this only on a separate WHMCS test installation.</div>';
         }
         if ($error) {
             $s .= '<div class="bachs-notice bachs-error" role="alert">' . $this->h($error) . '</div>';
@@ -160,34 +160,39 @@ class AdminView
     {
         $a = $this->app;
         $env = $a->settings->get('environment', 'sandbox');
-        $s = '<div class="bachs-two-col"><section class="bachs-panel"><p class="bachs-eyebrow">Step 1 · Merchant connection</p><h2>Connect your Bachs account</h2><p>Use the environment’s secret API key. This check reads your merchant identity and available methods.</p>';
-        $s .= $this->form('connect', array(), $this->select('environment', 'Environment', array('sandbox' => 'Sandbox','live' => 'Live'), $env) . $this->input('api_key', 'Secret API key', 'password', '', 'Leave empty to retain the saved key for this environment. Keys are never displayed.'), 'Verify connection') . '</section>';
-        $s .= '<section class="bachs-panel"><p class="bachs-eyebrow">Step 2 · Delivery</p><h2>Set up signed webhooks</h2><p>Copy the callback URL, subscribe to the required events, and save the signing secret in Webhooks.</p><a class="bachs-secondary" href="' . $this->h($this->link . '&page=webhooks') . '">Open webhook settings →</a><p class="bachs-muted">A reachable URL alone does not verify payment delivery.</p></section></div>';
-        $fields = $this->select('environment', 'Active environment for new payments', array('sandbox' => 'Sandbox','live' => 'Live'), $env);
-        $fields .= $this->select('checkout_mode', 'Checkout experience', array('redirect' => 'Hosted redirect','overlay' => 'Overlay with redirect fallback'), $a->settings->get('checkout_mode', 'redirect'));
-        $fields .= $this->input('button_label', 'Payment button label', 'text', $a->settings->get('button_label', 'Pay with Bachs')) . $this->input('expiry_minutes', 'Session expiry (1–1440 minutes)', 'number', $a->settings->get('expiry_minutes', 60));
-        $fields .= $this->input('worker_batch', 'Worker batch size (1–100 jobs)', 'number', $a->settings->get('worker_batch', 50)) . $this->input('worker_seconds', 'Worker loop budget (1–50 seconds)', 'number', $a->settings->get('worker_seconds', 20)) . $this->input('sensitive_retention_days', 'Terminal checkout credential retention (1–365 days)', 'number', $a->settings->get('sensitive_retention_days', 30));
-        $fields .= '<fieldset><legend>Invoice currencies</legend><div class="bachs-choice-grid">';
-        foreach (array('USD','NGN','GHS','KES','MWK','TZS','UGX','ZMW') as $c) {
-            $fields .= $this->check('currencies[]', $c, in_array($c, $a->settings->get('currencies', array('USD','NGN')), true), $c);
+        $s = '<section class="bachs-panel"><h2>Connect your Bachs account</h2><p>Use your own secret key for the selected environment. Blank keeps the saved key.</p>';
+        $s .= $this->form('connect', array(), $this->select('environment', 'Environment', array('sandbox' => 'Sandbox', 'live' => 'Live'), $env) . $this->input('api_key', 'Secret API key', 'password'), 'Verify connection') . '</section>';
+        $fields = $this->select('environment', 'Payment environment', array('sandbox' => 'Sandbox', 'live' => 'Live'), $env);
+        $fields .= $this->select('checkout_mode', 'Checkout style', array('redirect' => 'Hosted checkout', 'overlay' => 'Overlay with redirect fallback'), $a->settings->get('checkout_mode', 'redirect'));
+        $fields .= $this->input('button_label', 'Payment button text', 'text', $a->settings->get('button_label', 'Pay with Bachs'));
+        $fields .= $this->check('test_installation', 'This is a separate WHMCS test installation (required for sandbox payments)', $a->settings->get('test_installation', false));
+        $fields .= $this->check('saved_methods', 'Let clients save cards with their consent', $a->settings->get('saved_methods', false));
+        $fields .= $this->check('automatic_payments', 'Allow automatic card payments for WHMCS renewal invoices', $a->settings->get('automatic_payments', false));
+        $fields .= '<p class="bachs-muted">Automatic card payments also need the bachs_card gateway, WHMCS 7.9 or later, and client consent. Test this flow before enabling it.</p>';
+        $fields .= $this->check('enabled', 'Enable new payments', $a->settings->get('enabled', false));
+        $fields .= $this->check('draining', 'Maintenance: finish pending payments and stop new payments', $a->settings->get('draining', false));
+        $fields .= '<details><summary>Advanced payment settings</summary><fieldset><legend>Allowed invoice currencies</legend><div class="bachs-choice-grid">';
+        foreach (array('USD', 'NGN', 'GHS', 'KES', 'MWK', 'TZS', 'UGX', 'ZMW') as $currency) {
+            $fields .= $this->check('currencies[]', $currency, in_array($currency, $a->settings->get('currencies', array('USD', 'NGN')), true), $currency);
         }
-        $fields .= '</div><p class="bachs-muted">Enable each currency after its wire-amount acceptance tests. RWF/XAF/XOF remain behind the precision contract gate.</p></fieldset>';
-        $fields .= '<fieldset><legend>Hosted payment method restrictions</legend><p>Leave every box clear for an unrestricted provider-managed selection. Selected corridors are enforced without a fallback to unrestricted checkout.</p><div class="bachs-choice-grid">';
-        foreach (array('USD_CARD','NGN_CARD','NGN_BANK_TRANSFER','MOMO_GHS','MOMO_KES','MOMO_TZS','MOMO_UGX','MOMO_XAF','MOMO_XOF','MOMO_RWF','MOMO_MWK','MOMO_ZMW','CRYPTO') as $method) {
-            $fields .= $this->check('methods[]', str_replace('_', ' ', $method), in_array($method, $a->settings->get('methods', array()), true), $method);
+        $fields .= '</div></fieldset><fieldset><legend>Limit checkout methods</legend><p>Leave all clear to let Bachs show the methods available to your account.</p><div class="bachs-choice-grid">';
+        $methods = array('USD_CARD' => 'USD cards', 'NGN_CARD' => 'NGN cards', 'NGN_BANK_TRANSFER' => 'NGN bank transfer',
+            'MOMO_GHS' => 'Ghana mobile money', 'MOMO_KES' => 'Kenya mobile money', 'MOMO_TZS' => 'Tanzania mobile money',
+            'MOMO_UGX' => 'Uganda mobile money', 'MOMO_XAF' => 'XAF mobile money', 'MOMO_XOF' => 'XOF mobile money',
+            'MOMO_RWF' => 'Rwanda mobile money', 'MOMO_MWK' => 'Malawi mobile money', 'MOMO_ZMW' => 'Zambia mobile money', 'CRYPTO' => 'Crypto');
+        foreach ($methods as $value => $label) {
+            $fields .= $this->check('methods[]', $label, in_array($value, $a->settings->get('methods', array()), true), $value);
         }
-        $fields .= '</div></fieldset>' . $this->check('saved_methods', 'Offer card-saving consent during eligible invoice payments', $a->settings->get('saved_methods', false));
-        $fields .= $this->check('adaptive_allocation', 'Allow verified provider conversion for USD checkout after currency-specific acceptance', $a->settings->get('adaptive_allocation', false));
-        $fields .= $this->check('draining', 'Drain existing operations and stop new collections', $a->settings->get('draining', false)) . $this->check('enabled', 'Enable new invoice payments after acceptance checks', $a->settings->get('enabled', false));
-        $s .= '<section class="bachs-panel"><p class="bachs-eyebrow">Step 3 · Payment policy</p><h2>Configure checkout</h2>' . $this->form('settings', array(), $fields, 'Save payment settings') . '</section>';
-        $roles = $a->settings->get('roles', array());
-        $fields = '';
-        foreach (\Bachs\Whmcs\Infrastructure\Whmcs\Identity::$permissions as $cap => $native) {
-            if (in_array($cap, array('view_payments','view_diagnostics','manage_settings','manage_webhooks'), true)) {
-                continue;
-            } $fields .= $this->input('role_' . $cap, str_replace('_', ' ', $cap), 'text', isset($roles[$cap]) ? implode(',', $roles[$cap]) : '', 'Comma-separated WHMCS admin role IDs. Also requires: ' . $native);
+        $fields .= '</div></fieldset>' . $this->check('adaptive_allocation', 'Accept verified converted payments for USD invoices', $a->settings->get('adaptive_allocation', false));
+        $precisions = array();
+        foreach ($a->settings->get('collection_precision', array()) as $currency => $digits) {
+            $precisions[] = $currency . '=' . $digits;
         }
-        return $s . '<section class="bachs-panel"><h2>Assign action permissions</h2><p>Addon Access Control must also permit each role. Optional write permissions start empty.</p>' . $this->form('roles', array(), $fields, 'Save action permissions') . '</section>';
+        $fields .= '<label class="bachs-field"><span>Extra collection currency precision</span><textarea name="collection_precision" rows="3">' . $this->h(implode("\n", $precisions)) . '</textarea><small>For converted assets only. Enter verified CODE=decimal places values, one per line. Unknown currencies stay in review.</small></label>';
+        $fields .= $this->input('expiry_minutes', 'Checkout expiry in minutes', 'number', $a->settings->get('expiry_minutes', 60));
+        $fields .= $this->input('sensitive_retention_days', 'Keep completed checkout links for this many days', 'number', $a->settings->get('sensitive_retention_days', 30)) . '</details>';
+        $s .= '<section class="bachs-panel"><h2>Payment settings</h2><p>Save the webhook signing secret and run the worker before enabling payments. <a href="' . $this->h($this->link . '&page=webhooks') . '">Webhook settings</a></p>' . $this->form('settings', array(), $fields, 'Save payment settings') . '</section>';
+        return $s;
     }
 
     private function webhooks()
@@ -203,7 +208,7 @@ class AdminView
         } $s .= '</ul></details></section>';
         if ($this->scope && $this->can('manage_webhooks')) {
             $saved = $a->settings->secret('signing_' . $this->scope['id']) !== '';
-            $s .= '<div class="bachs-two-col"><section class="bachs-panel"><h2>Manual signing secret</h2><p>' . ($saved ? 'A signing secret is saved and encrypted.' : 'No signing secret has been saved.') . '</p>' . $this->form('signing', array(), $this->input('signing_secret', 'New signing secret', 'password', '', 'Blank keeps the saved secret. Replacement retains the previous secret for 24 hours.'), 'Save signing secret') . '</section><section class="bachs-panel"><h2>Register through the API</h2><p>Requires webhooks:write. Review the URL and event set before creating this integration’s endpoint.</p>' . $this->form('webhook_preview', array(), '', 'Preview endpoint registration') . '</section></div>';
+            $s .= '<section class="bachs-panel"><h2>Webhook signing secret</h2><p>' . ($saved ? 'A signing secret is saved and encrypted.' : 'No signing secret has been saved.') . '</p>' . $this->form('signing', array(), $this->input('signing_secret', 'Signing secret', 'password', '', 'Blank keeps the saved value. A replacement keeps the previous value for up to 24 hours.'), 'Save signing secret') . '</section>';
         }
         return $s . $this->table('webhook_events') . $this->table('jobs', 10, false);
     }
@@ -214,7 +219,7 @@ class AdminView
         $s = '<section class="bachs-panel"><h2>Installation diagnostics</h2><dl class="bachs-definition">';
         $values = array('Plugin' => '1.0.0 release candidate', 'PHP' => PHP_VERSION, 'WHMCS' => $a->bridge->version, 'Worker' => strip_tags($this->workerHealth()),
             'Encryption' => getenv('BACHS_ENCRYPTION_KEY') ? 'Dedicated authenticated encryption key' : 'WHMCS EncryptPassword / DecryptPassword',
-            'Licensed WHMCS acceptance' => 'See this installation’s private acceptance profile and docs/compatibility.md');
+            'Release status' => 'Release candidate; test in Bachs sandbox before live use');
         foreach (array('curl','openssl','json','pdo_mysql') as $ext) {
             $values[$ext] = extension_loaded($ext) ? 'Available' : 'Missing';
         }

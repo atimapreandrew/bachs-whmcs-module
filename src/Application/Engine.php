@@ -30,17 +30,24 @@ class Engine
         return $this->factory ? call_user_func($this->factory, $scope) : $this->settings->provider($scope);
     }
 
-    public function ready($scope, $invoice, $capability = 'collection')
+    public function assertCardBilling()
+    {
+        if (!$this->settings->get('automatic_payments', false) || !$this->settings->get('saved_methods', false)) {
+            throw new Failure('automatic_payments_disabled');
+        }
+        if (version_compare($this->bridge->version, '7.9', '<')) {
+            throw new Failure('native_card_version_not_supported');
+        }
+    }
+
+    public function ready($scope, $invoice, $automaticCard = false)
     {
         if (!$this->settings->get('enabled', false) || $this->settings->get('draining', false)) {
             throw new Failure('gateway_disabled');
         }
-        if ($this->store->clock->now() - $scope['data']['verified_at'] > 86400 * 7) {
-            throw new Failure('connection_check_expired');
-        }
-        $this->bridge->assertAcceptance($capability, $scope['data']['environment']);
-        if ($scope['data']['environment'] === 'sandbox' && !$this->bridge->sandboxInvoice($invoice['invoice_id'])) {
-            throw new Failure('sandbox_invoice_not_designated');
+        $this->settings->assertEnvironment($scope['data']['environment']);
+        if ($automaticCard) {
+            $this->assertCardBilling();
         }
         $this->settings->precision($invoice['currency']);
         $this->bridge->assertGateway($invoice['gateway']);
