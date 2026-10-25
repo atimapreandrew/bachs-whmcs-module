@@ -1,7 +1,6 @@
 <?php
 
 require_once dirname(dirname(dirname(__DIR__))) . '/init.php';
-require_once dirname(__DIR__) . '/bachs/bootstrap.php';
 header('Cache-Control: no-store');
 header('Content-Type: application/json');
 if (!isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -17,12 +16,13 @@ if (isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 10485
 }
 $raw = file_get_contents('php://input', false, null, 0, 1048577);
 $headers = array();
-foreach (array('HTTP_X_BACHS_SIGNATURE_V2' => 'X-Bachs-Signature-V2','HTTP_X_BACHS_TIMESTAMP' => 'X-Bachs-Timestamp','HTTP_X_BACHS_SIGNATURE' => 'X-Bachs-Signature') as $key => $name) {
+foreach (array('HTTP_X_BACHS_SIGNATURE_V2' => 'X-Bachs-Signature-V2') as $key => $name) {
     if (isset($_SERVER[$key])) {
         $headers[$name] = $_SERVER[$key];
     }
 }
 try {
+    require_once dirname(__DIR__) . '/bachs/bootstrap.php';
     $app = \Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app();
     (new \Bachs\Whmcs\Http\RateLimit($app->store))->check('webhook:' . (isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'unknown'), 600);
     $environment = isset($_GET['environment']) && is_string($_GET['environment']) ? $_GET['environment'] : '';
@@ -34,6 +34,6 @@ try {
     http_response_code(isset($safe[$e->reason]) ? $safe[$e->reason] : 503);
     echo json_encode(array('error' => isset($safe[$e->reason]) ? $e->reason : 'storage_unavailable'));
 } catch (Throwable $e) {
-    http_response_code(503);
-    echo '{"error":"storage_unavailable"}';
+    require_once dirname(__DIR__) . '/bachs/lib/src/Infrastructure/Diagnostics.php';
+    \Bachs\Whmcs\Infrastructure\Diagnostics::unavailable($e, 'webhook_startup', true);
 }

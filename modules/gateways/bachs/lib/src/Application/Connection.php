@@ -134,6 +134,9 @@ class Connection
         }
         $a = $this->app;
         $previous = $a->settings->secret('signing_' . $scope['id']);
+        if ($previous !== '' && hash_equals($previous, $secret)) {
+            return;
+        }
         if ($previous !== '' && $previous !== $secret) {
             $a->settings->saveSecret('previous_signing_' . $scope['id'], $previous);
             $a->settings->set('previous_expiry_' . $scope['id'], $a->store->clock->now() + 86400);

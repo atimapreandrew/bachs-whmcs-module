@@ -12,7 +12,7 @@ function bachs_config()
 {
     // Discovery must work before installation, credentials or a database exist.
     $fields = array('FriendlyName' => array('Type' => 'System', 'Value' => 'Bachs'),
-        'environment' => array('FriendlyName' => 'Environment', 'Type' => 'dropdown', 'Options' => array('sandbox' => 'Sandbox', 'live' => 'Live'), 'Default' => 'sandbox', 'Description' => 'Leave Convert To For Processing disabled. Callback URLs and payment activity appear below the gateway settings.'),
+        'environment' => array('FriendlyName' => 'Environment', 'Type' => 'dropdown', 'Options' => array('sandbox' => 'Sandbox', 'live' => 'Live'), 'Default' => 'sandbox', 'Description' => 'Leave Convert To For Processing disabled. The optional Bachs Payments addon provides activity, refund tools and callback URLs.'),
         'sandboxApiKey' => array('FriendlyName' => 'Sandbox secret API key', 'Type' => 'password', 'Size' => '60'),
         'sandboxSigningSecret' => array('FriendlyName' => 'Sandbox webhook signing secret', 'Type' => 'password', 'Size' => '60'),
         'liveApiKey' => array('FriendlyName' => 'Live secret API key', 'Type' => 'password', 'Size' => '60'),
@@ -47,6 +47,11 @@ function bachs_link($params)
         require_once __DIR__ . '/bachs/bootstrap.php';
         return \Bachs\Whmcs\Http\GatewayView::render(\Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app(), $params);
     } catch (Throwable $e) {
+        $reporter = __DIR__ . '/bachs/lib/src/Infrastructure/Diagnostics.php';
+        if (is_file($reporter)) {
+            require_once $reporter;
+            \Bachs\Whmcs\Infrastructure\Diagnostics::report($e, 'invoice_button');
+        }
         return '<p role="status">Bachs is temporarily unavailable for this invoice. Please contact billing support.</p>';
     }
 }

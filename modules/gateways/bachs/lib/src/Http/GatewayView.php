@@ -35,7 +35,7 @@ class GatewayView
             $s .= '<label class="checkbox"><input type="checkbox" name="save_method" value="1"><span>' . SafeData::html(\Bachs\Whmcs\Application\Checkout::consentText()) . '</span></label>';
         }
         $s .= '<button class="btn btn-primary" type="submit"><span data-bachs-label>' . SafeData::html($label) . '</span></button></form>';
-        $s .= '<p class="text-muted">Choose an available payment method at Bachs.</p><p class="text-info" data-bachs-status role="status" aria-live="polite"></p><a class="btn btn-default" data-bachs-fallback hidden rel="noreferrer">Continue to secure checkout ↗</a></div>';
+        $s .= '<p class="text-info" data-bachs-status role="status" aria-live="polite"></p><a class="btn btn-default" data-bachs-fallback hidden rel="noreferrer">Continue to secure checkout ↗</a></div>';
         $s .= '<script src="' . SafeData::html($root . '/assets/bachs.js') . '" defer></script>';
         return $s;
     }

@@ -69,6 +69,9 @@ class Engine
             }
             $out[$k] = $invoice[$k];
         }
+        if (in_array($out['status'], array('Unpaid', 'Payment Pending'), true)) {
+            $out['status'] = 'Payable';
+        }
         return hash('sha256', json_encode($out));
     }
 

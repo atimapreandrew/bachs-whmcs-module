@@ -23,10 +23,24 @@ function bachs_card_capture($params)
         return (new \Bachs\Whmcs\Application\SavedMethods($app))->capture((int)$params['invoiceid'], $params['gatewayid']);
     } catch (Throwable $e) {
         $reason = $e instanceof \Bachs\Whmcs\Domain\Failure ? $e->reason : 'capture_error';
-        if ($e instanceof \Bachs\Whmcs\Infrastructure\Bachs\ApiFailure && $e->unknown) {
+        if ($e instanceof \Bachs\Whmcs\Infrastructure\Bachs\ApiFailure && ($e->unknown || $e->reason === 'IDEMPOTENCY_IN_PROGRESS')) {
             return array('status' => 'pending', 'rawdata' => array('error_code' => 'collection_outcome_pending'));
         }
-        return array('status' => 'declined', 'declinereason' => \Bachs\Whmcs\Http\Messages::error($reason), 'rawdata' => array('error_code' => $reason));
+        $reference = null;
+        if (!$e instanceof \Bachs\Whmcs\Domain\Failure) {
+            $reporter = __DIR__ . '/bachs/lib/src/Infrastructure/Diagnostics.php';
+            if (is_file($reporter)) {
+                require_once $reporter;
+                $report = \Bachs\Whmcs\Infrastructure\Diagnostics::report($e, 'card_capture');
+                $reference = $report['reference'];
+            }
+        }
+        try {
+            $message = \Bachs\Whmcs\Http\Messages::error($reason);
+        } catch (Throwable $ignored) {
+            $message = 'Bachs could not collect this payment. Please contact billing support.';
+        }
+        return array('status' => 'declined', 'declinereason' => $message, 'rawdata' => array('error_code' => $reason, 'reference' => $reference));
     }
 }
 // WHMCS remote-input gateways declare that local card fields are not used.
@@ -39,6 +53,11 @@ function bachs_card_remoteinput($params)
         require_once __DIR__ . '/bachs/bootstrap.php';
         return \Bachs\Whmcs\Http\CardInput::render(\Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app(), $params);
     } catch (Throwable $e) {
+        $reporter = __DIR__ . '/bachs/lib/src/Infrastructure/Diagnostics.php';
+        if (is_file($reporter)) {
+            require_once $reporter;
+            \Bachs\Whmcs\Infrastructure\Diagnostics::report($e, 'card_input');
+        }
         return '<p>Saved-card setup is unavailable. Use Bachs hosted invoice payment.</p>';
     }
 }

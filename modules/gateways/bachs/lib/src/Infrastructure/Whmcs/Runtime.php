@@ -11,9 +11,15 @@ use Bachs\Whmcs\Infrastructure\SystemClock;
 class Runtime
 {
     private static $app;
-    public static function app()
+    private static $configuration;
+    private static $synchronized = false;
+    public static function app($synchronize = true)
     {
         if (self::$app) {
+            if ($synchronize && !self::$synchronized && self::$configuration !== null) {
+                (new GatewayConfiguration(self::$app))->synchronize(self::$configuration);
+                self::$synchronized = true;
+            }
             return self::$app;
         }
         if (!defined('WHMCS') || !class_exists('WHMCS\\Database\\Capsule')) {
@@ -33,7 +39,11 @@ class Runtime
         $settings = new Settings($store, $secrets);
         $bridge = new Bridge($api, $settings, $pdo, $root);
         self::$app = new Engine($store, $settings, $bridge);
-        (new GatewayConfiguration(self::$app))->synchronize($configuration);
+        self::$configuration = $configuration;
+        if ($synchronize) {
+            (new GatewayConfiguration(self::$app))->synchronize($configuration);
+            self::$synchronized = true;
+        }
         return self::$app;
     }
 }

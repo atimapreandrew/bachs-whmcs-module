@@ -1,0 +1,29 @@
+{
+  "schema": "1.0",
+  "type": "whmcs-addons",
+  "name": "bachs_payments",
+  "license": "MIT",
+  "category": "addon",
+  "description": {
+    "name": "Bachs Payments",
+    "tagline": "Payment history, refunds and webhook checks for the Bachs gateway.",
+    "long": "Optional payment operations for the Bachs gateway. All payment settings remain in Payment Gateways. Requires WHMCS 8.0 or later.",
+    "features": [
+      "View payment and refund records",
+      "Review refunds and reconciliation",
+      "Inspect webhook and worker status"
+    ]
+  },
+  "support": {
+    "homepage": "https://github.com/atimapreandrew/bachs-whmcs-module",
+    "learn_more": "https://github.com/atimapreandrew/bachs-whmcs-module#readme",
+    "support_url": "https://github.com/atimapreandrew/bachs-whmcs-module/issues",
+    "docs_url": "https://github.com/atimapreandrew/bachs-whmcs-module/blob/main/docs/installation.md"
+  },
+  "authors": [
+    {
+      "name": "Andrew Atimapre",
+      "homepage": "https://github.com/atimapreandrew"
+    }
+  ]
+}

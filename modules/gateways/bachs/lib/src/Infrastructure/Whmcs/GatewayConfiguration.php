@@ -47,12 +47,12 @@ class GatewayConfiguration
         try {
             $a->settings->set('enabled', false);
             $a->settings->set('automatic_payments', false);
-            $a->settings->set('native_configuration_hash', $hash);
             $a->settings->set('native_configuration_at', $a->store->clock->now());
             $a->settings->set('configuration_error', '');
+            $a->settings->set('configuration_error_reference', '');
             if (empty($values['type'])) {
                 $a->settings->set('draining', true);
-                return;
+                throw new Failure('native_gateway_inactive');
             }
             $input = $this->input($values);
             $this->connection->save($input, 'system:native_gateway_settings');
@@ -83,10 +83,16 @@ class GatewayConfiguration
                 $a->settings->assertEnvironment($environment);
                 $a->settings->set('enabled', true);
             }
+            $a->settings->set('native_configuration_hash', $hash);
         } catch (\Throwable $error) {
             $a->settings->set('enabled', false);
             $a->settings->set('automatic_payments', false);
             $a->settings->set('configuration_error', $error instanceof Failure ? $error->reason : 'configuration_failed');
+            $a->settings->set('native_configuration_hash', $hash);
+            if (!$error instanceof Failure) {
+                $report = \Bachs\Whmcs\Infrastructure\Diagnostics::report($error, 'configuration_apply');
+                $a->settings->set('configuration_error_reference', $report['reference']);
+            }
         } finally {
             $a->store->release('native_configuration', $lease);
         }

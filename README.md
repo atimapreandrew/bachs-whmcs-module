@@ -10,9 +10,11 @@ Built by [Andrew Atimapre](https://github.com/atimapreandrew). Free to use, chan
 2. Upload the `modules/` and `includes/` folders into your WHMCS root. Keep their folder structure.
 3. Open **Payment Gateways → All Payment Gateways**, find **Bachs** and activate it. Recent WHMCS versions also list payment gateways under **Apps & Integrations**.
 4. Enter your API key and webhook signing secret in the native **Bachs** gateway form. Select the environment, currencies and payment methods, then save.
-5. Register the callback shown under **Bachs payment activity → Webhooks and jobs**, run WHMCS cron, and enable **Accept new payments** and WHMCS's **Show on Order Form**.
+5. Register the callback in the installation guide, run WHMCS cron, and enable **Accept new payments** and WHMCS's **Show on Order Form**.
 
-All settings use WHMCS's normal Payment Gateways interface. Payment activity and refund tools appear below the gateway settings. The client pages use the active WHMCS theme. No addon activation, custom stylesheet, Composer install or frontend build is required.
+All payment settings use WHMCS's normal Payment Gateways interface. The client pages use the active WHMCS theme. No custom stylesheet, Composer install or frontend build is required.
+
+For payment history, refund tools and diagnostics, activate the optional **Bachs Payments** addon, assign staff access and open **Addons → Bachs Payments**. The addon has no payment settings, and disabling it does not stop the gateways, callbacks or cron.
 
 Read the [installation guide](docs/installation.md) for requirements, callback setup and saved cards.
 

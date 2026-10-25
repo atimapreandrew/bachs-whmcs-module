@@ -20,11 +20,11 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
         $this->settings = $settings;
         $this->pdo = $pdo;
         $this->root = $root;
-        $this->version = defined('WHMCS_VERSION') ? WHMCS_VERSION : (isset($GLOBALS['CONFIG']['Version']) ? $GLOBALS['CONFIG']['Version'] : '0');
+        $this->version = Environment::version();
         if (version_compare($this->version, '8.0', '<')) {
             throw new Failure('whmcs_version_not_supported');
         }
-        $this->identity = new Identity($api);
+        $this->identity = new Identity();
     }
 
     public function invoice($id)
@@ -72,7 +72,7 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
 
     public function systemUrl()
     {
-        $url = isset($GLOBALS['CONFIG']['SystemURL']) ? $GLOBALS['CONFIG']['SystemURL'] : '';
+        $url = Environment::setting('SystemURL');
         return \Bachs\Whmcs\Infrastructure\Bachs\Urls::system($url);
     }
 

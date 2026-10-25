@@ -19,9 +19,17 @@ class AdminView
         $this->app = $app;
         $this->link = $link;
         $this->token = $app->bridge->identity->token();
+        $this->refreshScope();
+    }
+
+    private function refreshScope()
+    {
         try {
-            $this->scope = $app->settings->activeScope();
-        } catch (\Throwable $e) {
+            $this->scope = $this->app->settings->activeScope();
+        } catch (\Bachs\Whmcs\Domain\Failure $e) {
+            if ($e->reason !== 'merchant_not_connected') {
+                throw $e;
+            }
             $this->scope = null;
         }
     }
@@ -50,11 +58,9 @@ class AdminView
         if (!isset(self::$pages[$page])) {
             $page = 'overview';
         }
-        $this->app->bridge->identity->admin('manage_settings');
+        $this->app->bridge->identity->admin('view_payments');
         if ($page === 'diagnostics') {
             $this->app->bridge->identity->admin('view_diagnostics');
-        } elseif (in_array($page, array('payments', 'refunds', 'saved', 'reconciliation', 'audit'), true)) {
-            $this->app->bridge->identity->admin('view_payments');
         }
         if (!headers_sent()) {
             header('Cache-Control: no-store, private');
@@ -68,12 +74,18 @@ class AdminView
                 $input['action'] = Input::text($_POST, 'bachs_action', '', 60);
                 $result = (new AdminActions($this->app))->run($input);
             } catch (\Throwable $e) {
-                $error = Messages::error($e instanceof \Bachs\Whmcs\Domain\Failure ? $e->reason : 'internal_error');
+                if ($e instanceof \Bachs\Whmcs\Domain\Failure) {
+                    $error = Messages::error($e->reason);
+                } else {
+                    $report = \Bachs\Whmcs\Infrastructure\Diagnostics::report($e, 'admin_action');
+                    $error = \Bachs\Whmcs\Infrastructure\Diagnostics::message($report);
+                }
             }
+            $this->refreshScope();
         }
-        $s = '<div id="bachs-payment-tools"><h2>Bachs payment activity</h2><p>Configure Bachs with the native gateway fields above. Leave Convert To For Processing disabled.</p><ul class="nav nav-tabs">';
+        $s = '<div id="bachs-payment-tools"><p>Configure all payment settings under <a href="configgateways.php">Payment Gateways &gt; Bachs</a>.</p><ul class="nav nav-tabs">';
         foreach (self::$pages as $key => $label) {
-            $s .= '<li' . ($key === $page ? ' class="active"' : '') . '><a href="' . $this->h($this->link . '?bachs_page=' . $key . '#bachs-payment-tools') . '">' . $this->h($label) . '</a></li>';
+            $s .= '<li' . ($key === $page ? ' class="active"' : '') . '><a href="' . $this->h($this->url(array('bachs_page' => $key))) . '">' . $this->h($label) . '</a></li>';
         }
         $s .= '</ul><div class="tab-content">';
         if ($error) {
@@ -120,11 +132,15 @@ class AdminView
         $a = $this->app;
         $error = $a->settings->get('configuration_error');
         $s = $error ? '<div class="alert alert-warning">' . $this->h(Messages::error($error)) . '</div>' : '';
+        $reference = $a->settings->get('configuration_error_reference', '');
+        if ($error && is_string($reference) && preg_match('/^[a-f0-9]{12}$/D', $reference)) {
+            $s .= '<p>WHMCS Activity Log reference: <code>' . $this->h($reference) . '</code></p>';
+        }
         $s .= '<dl><dt>Environment</dt><dd>' . $this->h($a->settings->get('environment', 'sandbox')) . '</dd>';
         $s .= '<dt>Merchant</dt><dd>' . ($this->scope ? $this->h($this->scope['data']['name']) : 'Not connected') . '</dd>';
         $s .= '<dt>New payments</dt><dd>' . ($a->settings->get('draining', false) ? 'Maintenance mode' : ($a->settings->get('enabled', false) ? 'Enabled' : 'Disabled')) . '</dd>';
         $s .= '<dt>Background processing</dt><dd>' . $this->workerHealth() . '</dd></dl>';
-        $s .= $this->form('verify', array(), '<p>Save the native gateway form above before verifying the connection.</p>', 'Verify saved gateway settings');
+        $s .= $this->form('verify', array(), '<p>Save any changes in Payment Gateways before verifying the connection.</p>', 'Verify saved gateway settings');
         $s .= '<p>Pending payments continue to reconcile when the client leaves. Request refunds from the Payments tab; record a native Record Only refund after Bachs confirms success.</p>';
         return $s;
     }
@@ -142,7 +158,7 @@ class AdminView
         } $s .= '</ul></details></section>';
         if ($this->scope) {
             $saved = $a->settings->secret('signing_' . $this->scope['id']) !== '';
-            $s .= '<p>' . ($saved ? 'A signing secret is saved.' : 'Set the webhook signing secret in the Bachs gateway fields above.') . '</p>';
+            $s .= '<p>' . ($saved ? 'A signing secret is saved.' : 'Set the webhook signing secret in Payment Gateways > Bachs.') . '</p>';
 
         }
         return $s . $this->table('webhook_events') . $this->table('jobs', 10, false);
@@ -170,20 +186,21 @@ class AdminView
     private function table($table, $limit = 25, $paginate = true)
     {
         $a = $this->app;
-        $page = max(1, isset($_GET['bachs_p']) ? (int)$_GET['bachs_p'] : 1);
+        $page = max(1, isset($_GET['bachs_p']) ? Input::number($_GET, 'bachs_p') : 1);
         $filters = array();
         $state = Input::text($_GET, 'bachs_state', '', 40);
         if ($state !== '') {
             $filters['state'] = $state;
         }
-        if (isset($_GET['bachs_invoice']) && (int)$_GET['bachs_invoice'] > 0) {
-            $filters['invoice_id'] = (int)$_GET['bachs_invoice'];
+        $invoiceId = isset($_GET['bachs_invoice']) && $_GET['bachs_invoice'] !== '' ? Input::number($_GET, 'bachs_invoice') : 0;
+        if ($invoiceId > 0) {
+            $filters['invoice_id'] = $invoiceId;
         }
         $rows = $a->store->listing($table, $filters, $limit, $paginate ? ($page - 1) * $limit : 0);
         $title = ucwords(str_replace('_', ' ', $table));
         $s = '<section><div><h2>' . $this->h($title) . '</h2><span>Newest first · UTC</span></div>';
         if ($paginate) {
-            $s .= '<form class="form-inline" method="get"><input type="hidden" name="bachs_tools" value="1"><input type="hidden" name="bachs_page" value="' . $this->h(Input::text($_GET, 'bachs_page', 'overview')) . '"><label>State <input class="form-control" name="bachs_state" value="' . $this->h($state) . '" placeholder="All states"></label><label>Invoice <input class="form-control" name="bachs_invoice" inputmode="numeric" value="' . (isset($_GET['bachs_invoice']) ? (int)$_GET['bachs_invoice'] : '') . '" placeholder="All invoices"></label><button class="btn btn-default" type="submit">Filter</button></form>';
+            $s .= '<form class="form-inline" method="get" action="' . $this->h($this->link) . '">' . $this->queryFields() . '<input type="hidden" name="bachs_page" value="' . $this->h(Input::text($_GET, 'bachs_page', 'overview')) . '"><label>State <input class="form-control" name="bachs_state" value="' . $this->h($state) . '" placeholder="All states"></label><label>Invoice <input class="form-control" name="bachs_invoice" inputmode="numeric" value="' . ($invoiceId ?: '') . '" placeholder="All invoices"></label><button class="btn btn-default" type="submit">Filter</button></form>';
         }
         if (!$rows) {
             return $s . '<div class="text-muted"><strong>No ' . $this->h(strtolower($title)) . ' to display</strong><p>New records will appear here after the related payment activity or a provider refresh.</p></div></section>';
@@ -230,7 +247,7 @@ class AdminView
         }
         $s .= '</tbody></table></div>';
         if ($paginate) {
-            $base = $this->link . '?bachs_page=' . rawurlencode(Input::text($_GET, 'bachs_page', 'overview')) . '&bachs_state=' . rawurlencode($state) . '&bachs_invoice=' . (isset($_GET['bachs_invoice']) ? (int)$_GET['bachs_invoice'] : 0);
+            $base = $this->url(array('bachs_page' => Input::text($_GET, 'bachs_page', 'overview'), 'bachs_state' => $state, 'bachs_invoice' => $invoiceId));
             $s .= '<nav class="pager" aria-label="Records">';
             if ($page > 1) {
                 $s .= '<a href="' . $this->h($base . '&bachs_p=' . ($page - 1)) . '">Previous</a> ';
@@ -283,7 +300,7 @@ class AdminView
         if (isset(AdminActions::$permissions[$action]) && !$this->can(AdminActions::$permissions[$action])) {
             return '';
         }
-        $s = '<form class="form-group" action="' . $this->h($this->link . '?bachs_page=' . Input::text($_GET, 'bachs_page', 'overview')) . '" method="post">';
+        $s = '<form class="form-group" action="' . $this->h($this->url(array('bachs_page' => Input::text($_GET, 'bachs_page', 'overview')))) . '" method="post">';
         $values = array_merge(array('bachs_action' => $action, 'token' => $this->token, 'scope_id' => $this->scope ? $this->scope['id'] : ''), $hidden);
         foreach ($values as $k => $v) {
             $s .= '<input type="hidden" name="' . $this->h($k) . '" value="' . $this->h($v) . '">';
@@ -294,6 +311,24 @@ class AdminView
     private function input($name, $label, $type = 'text', $value = '', $help = '')
     {
         return '<label class="form-group"><span>' . $this->h($label) . '</span><input class="form-control" name="' . $this->h($name) . '" type="' . $this->h($type) . '" value="' . $this->h($value) . '"' . ($type === 'password' ? ' autocomplete="new-password" spellcheck="false"' : '') . '>' . ($help ? '<small>' . $this->h($help) . '</small>' : '') . '</label>';
+    }
+
+    private function url(array $query)
+    {
+        return $this->link . (strpos($this->link, '?') === false ? '?' : '&') . http_build_query($query, '', '&', PHP_QUERY_RFC3986);
+    }
+
+    private function queryFields()
+    {
+        $query = array();
+        parse_str((string)parse_url($this->link, PHP_URL_QUERY), $query);
+        $html = '';
+        foreach ($query as $key => $value) {
+            if (is_string($value)) {
+                $html .= '<input type="hidden" name="' . $this->h($key) . '" value="' . $this->h($value) . '">';
+            }
+        }
+        return $html;
     }
 
 }

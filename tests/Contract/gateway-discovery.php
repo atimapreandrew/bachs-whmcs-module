@@ -8,6 +8,7 @@ test('WHMCS discovers both gateways and registers hooks without the runtime or d
         copy($root . '/modules/gateways/' . $name, $directory . '/' . $name);
     }
     copy($root . '/includes/hooks/bachs.php', $directory . '/hooks.php');
+    copy($root . '/modules/addons/bachs_payments/bachs_payments.php', $directory . '/addon.php');
     $script = <<<'PHP'
 <?php
 define('WHMCS', true);
@@ -16,8 +17,9 @@ function add_hook($name, $priority, $callback) { $GLOBALS['hooks'][] = $name; }
 require __DIR__ . '/bachs.php';
 require __DIR__ . '/bachs_card.php';
 require __DIR__ . '/hooks.php';
+require __DIR__ . '/addon.php';
 echo json_encode(array('main' => bachs_config(), 'card' => bachs_card_config(),
-    'main_meta' => bachs_MetaData(), 'card_meta' => bachs_card_MetaData(),
+    'addon' => bachs_payments_config(), 'main_meta' => bachs_MetaData(), 'card_meta' => bachs_card_MetaData(),
     'runtime_loaded' => class_exists('Bachs\Whmcs\Infrastructure\Whmcs\Runtime', false), 'hooks' => $hooks));
 PHP;
     file_put_contents($directory . '/discover.php', $script);
@@ -29,7 +31,9 @@ PHP;
         same('Bachs', $data['main']['FriendlyName']['Value']);
         same('Bachs saved card', $data['card']['FriendlyName']['Value']);
         same(false, $data['runtime_loaded']);
-        truth(in_array('AdminAreaFooterOutput', $data['hooks'], true));
+        same(false, in_array('AdminAreaFooterOutput', $data['hooks'], true));
+        same('Bachs Payments', $data['addon']['name']);
+        same(array(), $data['addon']['fields']);
         truth(in_array('ClientAreaFooterOutput', $data['hooks'], true));
         foreach ($data['main'] as $key => $field) {
             truth(in_array($field['Type'], array('System', 'text', 'password', 'yesno', 'dropdown', 'radio', 'textarea'), true));
@@ -49,7 +53,7 @@ PHP;
     }
 });
 
-test('The source module contains its runtime and assets without a build or addon', function () {
+test('The source module contains its runtime and assets without a build', function () {
     $root = dirname(dirname(__DIR__));
     foreach (array('modules/gateways/bachs/lib/autoload.php', 'modules/gateways/bachs/lib/src/Application/Checkout.php',
         'modules/gateways/bachs/assets/bachs.js', 'modules/gateways/callback/bachs.php', 'includes/hooks/bachs.php') as $path) {

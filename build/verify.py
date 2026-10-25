@@ -11,7 +11,7 @@ import sys
 import tempfile
 import zipfile
 
-from package import DIST, VERSION, digest
+from package import DIST, ROOT, VERSION, digest
 
 
 def run_php(code):
@@ -29,6 +29,17 @@ def check_loader(path, label, errors):
         errors.append(label + ' failed: ' + output + error)
 
 
+def check_addon(path, mode, expected, errors):
+    result = subprocess.run(['php', str(ROOT / 'tests/Support/addon-startup.php'), mode, str(path)], capture_output=True, text=True)
+    try:
+        response = json.loads(result.stdout)
+    except ValueError:
+        errors.append('Packaged addon startup returned invalid output: ' + result.stderr)
+        return
+    if result.returncode or expected not in response['html'] or response['api_calls'] != 0:
+        errors.append('Packaged addon startup failed: ' + mode)
+
+
 def main():
     errors = []
     archive_name = f'bachs-whmcs-{VERSION}.zip'
@@ -42,6 +53,8 @@ def main():
         'modules/gateways/bachs_card/whmcs.json',
         'modules/gateways/callback/bachs.php',
         'includes/hooks/bachs.php',
+        'modules/addons/bachs_payments/bachs_payments.php',
+        'modules/addons/bachs_payments/whmcs.json',
     )
 
     with zipfile.ZipFile(archive_path) as archive:
@@ -56,8 +69,10 @@ def main():
             if re.search(rb'sk_(?:live|sandbox)_[A-Za-z0-9_-]{16,}|whsec_[A-Za-z0-9_-]{16,}', archive.read(name)):
                 errors.append('Possible credential in: ' + name)
 
-        if any(name.startswith('modules/addons/') or name.endswith('.css') for name in names):
-            errors.append('Addon or custom stylesheet shipped in the gateway package')
+        if any(name.endswith('.css') for name in names):
+            errors.append('Custom stylesheet shipped in the gateway package')
+        if any(name.startswith('modules/addons/') and not name.startswith('modules/addons/bachs_payments/') for name in names):
+            errors.append('Unexpected addon shipped in the gateway package')
         for removed in ('Connect', 'Finance', 'Disputes', 'Subscriptions'):
             if library_path + 'src/Application/' + removed + '.php' in names:
                 errors.append('Removed merchant service shipped: ' + removed)
@@ -78,6 +93,15 @@ def main():
     base = DIST / 'whmcs-root/modules/gateways/bachs'
     check_loader(base / 'lib/autoload.php', 'Packaged autoload', errors)
     check_loader(base / 'bootstrap.php', 'Packaged bootstrap', errors)
+    check_addon(DIST / 'whmcs-root', 'empty', 'bachs-payment-tools', errors)
+    check_addon(DIST / 'whmcs-root', 'configured', 'bachs-payment-tools', errors)
+
+    # The gateway must also work when the optional operations addon is omitted.
+    with tempfile.TemporaryDirectory(prefix='bachs-no-addon-') as temporary:
+        copied = Path(temporary) / 'whmcs-root'
+        shutil.copytree(DIST / 'whmcs-root', copied)
+        shutil.rmtree(copied / 'modules/addons')
+        check_loader(copied / 'modules/gateways/bachs/bootstrap.php', 'Gateway without optional addon', errors)
 
     # Simulate an incomplete upload without touching the real package.
     with tempfile.TemporaryDirectory(prefix='bachs-package-check-') as temporary:
@@ -93,6 +117,7 @@ def main():
         status, output, error = run_php(code)
         if status or output != 'blocked':
             errors.append('Partial upload was not blocked: ' + error)
+        check_addon(copied, 'empty', 'The Bachs files do not match', errors)
 
     if sorted(path.name for path in DIST.glob('*.zip')) != [archive_name]:
         errors.append('Unexpected extra ZIP files')

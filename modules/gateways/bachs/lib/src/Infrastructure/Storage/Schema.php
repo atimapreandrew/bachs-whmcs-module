@@ -57,7 +57,15 @@ class Schema
                 if ($mysql) {
                     $s = $pdo->query("SHOW INDEX FROM " . $name . " WHERE Key_name = '" . $index . "'");
                     if (!$s->fetch()) {
-                        $pdo->exec('CREATE INDEX ' . $index . ' ON ' . $name . ' (' . $columns . ')');
+                        try {
+                            $pdo->exec('CREATE INDEX ' . $index . ' ON ' . $name . ' (' . $columns . ')');
+                        } catch (\PDOException $error) {
+                            // Another first request may have created the same index.
+                            if (!isset($error->errorInfo[1]) || (int)$error->errorInfo[1] !== 1061
+                                || !$pdo->query("SHOW INDEX FROM " . $name . " WHERE Key_name = '" . $index . "'")->fetch()) {
+                                throw $error;
+                            }
+                        }
                     }
                 } else {
                     $pdo->exec('CREATE INDEX IF NOT EXISTS ' . $index . ' ON ' . $name . ' (' . $columns . ')');

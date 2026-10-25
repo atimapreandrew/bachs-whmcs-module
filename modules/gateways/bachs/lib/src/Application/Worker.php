@@ -4,6 +4,7 @@ namespace Bachs\Whmcs\Application;
 
 use Bachs\Whmcs\Domain\Failure;
 use Bachs\Whmcs\Infrastructure\Bachs\ApiFailure;
+use Bachs\Whmcs\Infrastructure\Diagnostics;
 
 /** Runs bounded, recoverable payment and refund checks outside the client browser. */
 class Worker
@@ -37,6 +38,9 @@ class Worker
                 $a->queue->finish($job, $pending ? min(3600, 30 * pow(2, min(6, $job['data']['tries']))) : null, $pending ? 'provider_pending' : null);
             } catch (\Throwable $e) {
                 $reason = $e instanceof Failure ? $e->reason : 'worker_internal_error';
+                if (!$e instanceof Failure) {
+                    Diagnostics::report($e, 'worker_job');
+                }
                 $delay = $e instanceof ApiFailure ? $e->retryAfter : min(3600, 30 * pow(2, min(6, $job['data']['tries'])));
                 $a->queue->finish($job, $delay + random_int(0, 10), $reason);
                 $a->store->exception($job['scope'], $reason, $job['data']['aggregate']);
@@ -97,17 +101,34 @@ class Worker
             if (!$attempt) {
                 return false;
             }
+            if (in_array($attempt['state'], array('posted','failed','setup_completed','expired_verified','cancelled_verified'), true)) {
+                return false;
+            }
             if (!empty($attempt['data']['operation_id']) && empty($attempt['data']['checkout_id']) && empty($attempt['data']['payment_id'])) {
                 $op = $a->store->get('operations', $attempt['data']['operation_id']);
+                if ($op && $op['state'] === 'rejected') {
+                    $a->store->update('attempts', $id, array(), 'failed');
+                    return false;
+                }
+                $response = null;
                 if ($op && $op['state'] === 'succeeded' && isset($op['data']['response'])) {
                     $response = json_decode($a->settings->secrets->open($op['data']['response']), true);
+                } elseif ($op && in_array($op['state'], array('prepared','retryable'), true)) {
+                    if ($op['next_run'] > $a->store->clock->now()) {
+                        return true;
+                    }
+                    $response = $this->resume($attempt, $op);
+                } elseif ($op && in_array($op['state'], array('sending','outcome_unknown'), true)) {
+                    $a->store->exception($attempt['scope'], 'write_outcome_unknown', $op['id']);
+                }
+                if ($response !== null) {
                     if (isset($response['checkout_id'])) {
                         (new Checkout($a))->accept($attempt, $response);
                     } elseif (isset($response['payment_id'])) {
-                        $a->store->update('attempts', $id, array('payment_id' => $response['payment_id']), 'pending');
+                        $a->store->update('attempts', $id, array('payment_id' => \Bachs\Whmcs\Domain\Ids::opaque($response['payment_id'])), 'pending');
+                    } else {
+                        throw new Failure('payment_operation_contract_mismatch');
                     }
-                } elseif ($op && in_array($op['state'], array('sending','outcome_unknown'), true)) {
-                    $a->store->exception($attempt['scope'], 'write_outcome_unknown', $op['id']);
                 }
             }
             return (new PaymentRecognition($a))->reconcile($id) === 'pending';
@@ -134,6 +155,61 @@ class Worker
         throw new Failure('unknown_job_type');
     }
 
+    /** Resume only unsent requests or an explicit provider idempotency retry. */
+    private function resume($attempt, $operation)
+    {
+        $a = $this->app;
+        $d = $attempt['data'];
+        $scope = $a->settings->activeScope();
+        if ($scope['id'] !== $attempt['scope'] || $operation['scope'] !== $attempt['scope']) {
+            throw new Failure('existing_attempt_requires_reconciliation');
+        }
+        $lock = $d['purpose'] === 'setup' ? 'card_setup:' . $scope['id'] . ':' . $attempt['client_id'] : 'invoice:' . $attempt['invoice_id'];
+        $lease = $a->store->acquire($lock);
+        $methodLease = null;
+        try {
+            if ($d['purpose'] === 'setup') {
+                if (!$a->settings->get('enabled', false) || !$a->settings->get('saved_methods', false) || $a->settings->get('draining', false)) {
+                    throw new Failure('saving_not_enabled');
+                }
+                $a->settings->assertEnvironment($scope['data']['environment']);
+                $a->settings->cardMethods('USD');
+            } else {
+                $invoice = $a->bridge->invoice($attempt['invoice_id']);
+                $a->ready($scope, $invoice, $d['purpose'] === 'capture');
+                if ($a->snapshot($invoice) !== $d['snapshot']) {
+                    throw new Failure('invoice_changed_during_payment');
+                }
+                if ($d['purpose'] === 'capture') {
+                    $methodLease = $a->store->acquire('method:' . $d['method_id']);
+                    $a->settings->cardMethods($invoice['currency']);
+                    $method = (new SavedMethods($a))->owned($d['method_id'], $scope['id'], $attempt['client_id']);
+                    if (!$a->settings->get('saved_methods', false) || $invoice['gateway'] !== 'bachs_card' || $method['data']['currency'] !== $invoice['currency']) {
+                        throw new Failure('capture_not_enabled');
+                    }
+                } else {
+                    $enabled = $a->settings->checkoutMethods($invoice['currency'], $d['save']);
+                    if (array_diff($d['allowed_methods'], $enabled)) {
+                        throw new Failure('invoice_payment_method_unavailable');
+                    }
+                }
+            }
+            if (!empty($d['consent_id'])) {
+                $consent = $a->store->get('consents', $d['consent_id']);
+                if (!$consent || $consent['state'] !== 'active') {
+                    throw new Failure('automatic_payment_consent_revoked');
+                }
+            }
+            if (isset($d['expires_at']) && $d['expires_at'] <= $a->store->clock->now()) {
+                throw new Failure('existing_attempt_requires_reconciliation');
+            }
+            return $a->operations->send($operation, $scope, $a->provider($scope));
+        } finally {
+            if ($methodLease !== null) { $a->store->release('method:' . $d['method_id'], $methodLease); }
+            $a->store->release($lock, $lease);
+        }
+    }
+
     private function sweep($scope)
     {
         $a = $this->app;
@@ -144,54 +220,56 @@ class Worker
             throw new Failure('payment_list_contract_mismatch');
         }
         foreach ($list['items'] as $item) {
-            if (!isset($item['id'])) {
-                continue;
+            $target = is_array($item) && isset($item['id']) && is_string($item['id']) ? $item['id'] : hash('sha256', json_encode($item));
+            try {
+                if (!is_array($item) || !isset($item['id'])) {
+                    throw new Failure('payment_list_item_invalid');
+                }
+                \Bachs\Whmcs\Domain\Ids::opaque($item['id']);
+                $this->sweepPayment($scope, $item);
+            } catch (ApiFailure $error) {
+                // Retry the page after transport/authentication/backoff failures.
+                throw $error;
+            } catch (Failure $error) {
+                // One malformed receipt must not hide later payments on this page.
+                $a->store->exception($scope['id'], 'sweep_item_invalid', $target, array('error_code' => $error->reason));
             }
-            $payment = $a->store->byProvider('payments', $scope['id'], $item['id']);
-            if ($payment) {
-                $fields = array();
-                foreach (array('settlement_amount','settlement_currency') as $k) {
-                    if (isset($item[$k]) && is_string($item[$k])) {
-                        $fields[$k] = $item[$k];
-                    }
+        }
+        // Keep a ten-record overlap as new receipts arrive. Complete each scan,
+        // including older payments whose refund webhook may have been missed.
+        $a->settings->set($cursorKey, !empty($list['pagination']['has_more'])
+            ? $offset + max(1, count($list['items']) - 10) : 0);
+    }
+
+    private function sweepPayment($scope, $item)
+    {
+        $a = $this->app;
+        $payment = $a->store->byProvider('payments', $scope['id'], $item['id']);
+        if ($payment) {
+            $fields = array();
+            foreach (array('settlement_amount','settlement_currency') as $key) {
+                if (isset($item[$key]) && is_string($item[$key])) {
+                    $fields[$key] = $item[$key];
                 }
-                if ($fields) {
-                    $a->store->update('payments', $payment['id'], $fields);
+            }
+            if ($fields) {
+                $a->store->update('payments', $payment['id'], $fields);
+            }
+            if (in_array(isset($item['status']) ? $item['status'] : '', array('refunded','partially_refunded','auto_refunded'), true)) {
+                $refund = (new Refunds($a))->byCharge($scope, $item['id']);
+                if ($refund) {
+                    (new Refunds($a))->import($scope, $payment, $refund);
                 }
-                if (in_array(isset($item['status']) ? $item['status'] : '', array('refunded','partially_refunded','auto_refunded'), true)) {
-                    $r = (new Refunds($a))->byCharge($scope, $item['id']);
-                    if ($r) {
-                        (new Refunds($a))->import($scope, $payment, $r);
-                    }
-                }
-            } elseif (!empty($item['reference'])) {
-                $ref = $a->store->find('settings', $scope['id'], 'attempt_reference:' . $item['reference']);
-                if ($ref) {
-                    (new PaymentRecognition($a))->reconcile($ref['data']['attempt_id'], $item['id']);
-                } else {
-                    $a->store->exception($scope['id'], 'unmatched_provider_payment', $item['id']);
-                }
+            }
+        } elseif (!empty($item['reference'])) {
+            $ref = $a->store->find('settings', $scope['id'], 'attempt_reference:' . \Bachs\Whmcs\Domain\Ids::opaque($item['reference']));
+            if ($ref) {
+                (new PaymentRecognition($a))->reconcile($ref['data']['attempt_id'], $item['id']);
             } else {
-                $a->store->exception($scope['id'], 'unallocated_deposit', $item['id']);
+                $a->store->exception($scope['id'], 'unmatched_provider_payment', $item['id']);
             }
-        }
-        // Durable offset with a 10-record overlap. Stop a scan at its previous high-water ID;
-        // the next scan always starts at the newest receipts to recover late updates.
-        $hasMore = !empty($list['pagination']['has_more']);
-        $highKey = 'payment_highwater_' . $scope['id'];
-        $previous = $a->settings->get($highKey);
-        if ($offset === 0 && !empty($list['items'][0]['id'])) {
-            $a->settings->set('payment_new_highwater_' . $scope['id'], $list['items'][0]['id']);
-        }
-        $reached = false;
-        foreach ($list['items'] as $item) {
-            if (isset($item['id']) && $item['id'] === $previous) {
-                $reached = true;
-            }
-        }
-        $a->settings->set($cursorKey, $hasMore && !$reached ? $offset + max(1, count($list['items']) - 10) : 0);
-        if (!$hasMore || $reached) {
-            $a->settings->set($highKey, $a->settings->get('payment_new_highwater_' . $scope['id']));
+        } else {
+            $a->store->exception($scope['id'], 'unallocated_deposit', $item['id']);
         }
     }
 

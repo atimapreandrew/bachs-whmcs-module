@@ -6,15 +6,9 @@ use Bachs\Whmcs\Domain\Failure;
 
 class Identity implements \Bachs\Whmcs\Domain\IdentityResolver
 {
-    private $api;
     public static $permissions = array('view_payments' => 'List Transactions', 'manage_settings' => 'Configure Payment Gateways',
         'manage_webhooks' => 'Configure Payment Gateways', 'request_refunds' => 'Refund Invoice Payments',
         'finalize_refund_accounting' => 'Refund Invoice Payments', 'view_diagnostics' => 'View Gateway Log', 'export_diagnostics' => 'Client Data Export');
-
-    public function __construct(LocalApi $api)
-    {
-        $this->api = $api;
-    }
 
     public function client($clientId = null)
     {
@@ -37,18 +31,18 @@ class Identity implements \Bachs\Whmcs\Domain\IdentityResolver
 
     public function admin($capability)
     {
-        if (!isset(self::$permissions[$capability]) || empty($_SESSION['adminid'])) {
+        if (!isset(self::$permissions[$capability])) {
             throw new Failure('admin_access_denied');
         }
-        $row = \WHMCS\Database\Capsule::table('tbladmins')->where('id', (int)$_SESSION['adminid'])->where('disabled', 0)->first(array('id','username','roleid'));
-        if (!$row) {
+        $current = new \WHMCS\Authentication\CurrentUser();
+        $admin = $current->admin();
+        if (!$current->isAuthenticatedAdmin() || !$admin || !empty($admin->disabled)) {
             throw new Failure('admin_access_denied');
         }
-        $details = $this->api->call('GetAdminDetails', array(), $row->username);
-        if ((int)$details['adminid'] !== (int)$row->id || !in_array(self::$permissions[$capability], explode(',', $details['allowedpermissions']), true)) {
+        if (!$admin->hasPermission(self::$permissions[$capability])) {
             throw new Failure('action_permission_denied');
         }
-        return array('id' => (int)$row->id, 'role_id' => (int)$row->roleid, 'actor' => 'admin:' . (int)$row->id);
+        return array('id' => (int)$admin->id, 'role_id' => (int)$admin->roleId, 'actor' => 'admin:' . (int)$admin->id);
     }
 
     public function csrf()

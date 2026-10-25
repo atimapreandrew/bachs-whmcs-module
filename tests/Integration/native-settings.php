@@ -134,7 +134,7 @@ test('Gateway runtime installs module tables without addon activation', function
     same(count(\Bachs\Whmcs\Infrastructure\Storage\Schema::$tables), (int)$count);
 });
 
-test('Payment activity uses native controls and never treats the core settings save as a module action', function () {
+test('Addon activity uses native controls and never treats a gateway settings save as a module action', function () {
     list($a, $p) = environment();
     $oldGet = $_GET; $oldPost = $_POST; $oldServer = $_SERVER;
     try {
@@ -142,15 +142,15 @@ test('Payment activity uses native controls and never treats the core settings s
         $_POST = array('action' => 'save', 'sandboxApiKey' => 'must-not-be-rendered');
         $_SERVER['REQUEST_METHOD'] = 'POST';
         $a->bridge->identity->validCsrf = false;
-        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'configgateways.php'))->render();
+        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'addonmodules.php?module=bachs_payments'))->render();
         truth(strpos($html, 'class="nav nav-tabs"') !== false);
         truth(strpos($html, 'class="btn btn-primary"') !== false);
         truth(strpos($html, 'name="bachs_action" value="verify"') !== false);
-        foreach (array('must-not-be-rendered', 'addonmodules.php', 'bachs.css', 'bachs-wordmark', 'bachs-nav') as $unwanted) {
+        foreach (array('must-not-be-rendered', 'configgateways.php?bachs_page=', 'bachs.css', 'bachs-wordmark', 'bachs-nav') as $unwanted) {
             same(false, strpos($html, $unwanted) !== false);
         }
         $_POST = array('bachs_action' => 'verify');
-        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'configgateways.php'))->render();
+        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'addonmodules.php?module=bachs_payments'))->render();
         truth(strpos($html, 'csrf_required') !== false);
         same(0, count($p->calls));
     } finally {

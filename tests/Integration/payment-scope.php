@@ -69,7 +69,7 @@ test('Admin settings do not expose removed tools even with their old feature fla
     try {
         $_GET = array('bachs_page' => 'overview');
         $_SERVER['REQUEST_METHOD'] = 'GET';
-        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'configgateways.php'))->render();
+        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'addonmodules.php?module=bachs_payments'))->render();
         foreach (array('finance','connect','disputes','subscriptions') as $page) {
             same(false, strpos($html, '&amp;page=' . $page) !== false);
         }

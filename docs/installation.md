@@ -10,7 +10,7 @@ Requires WHMCS 8.0 or later. Use the PHP version supported by your WHMCS release
 4. Open **Manage Existing Gateways** and configure **Bachs** with the native WHMCS fields.
 5. Keep **Convert To For Processing** disabled. Use Bachs's own USD conversion setting when needed.
 
-The source folders are directly installable; no build step is needed on the WHMCS server. The release ZIP also includes checksums and a file-integrity manifest. The gateway creates its own tables on first runtime use. There is no addon, import step or separate settings file.
+The source folders are directly installable; no build step is needed on the WHMCS server. The release ZIP also includes checksums and a file-integrity manifest. The gateway creates its own tables on first runtime use. The gateway runs independently of the optional activity addon. There is no import step or separate settings file.
 
 ## Gateway settings
 
@@ -20,12 +20,19 @@ Choose the accepted invoice currencies and payment methods with the checkboxes. 
 
 Choose hosted checkout or overlay checkout. You can also set the button text, checkout expiry, completed-link retention and maintenance mode. Maintenance blocks new payments while pending financial work finishes.
 
-Save the native form first. Under **Bachs payment activity → Status**, use **Verify saved gateway settings** to check the stored configuration. Configure webhooks and run cron before enabling **Accept new payments**. Check WHMCS's **Show on Order Form** when you want clients to use the gateway.
+Save the native form first. If the activity addon is enabled, open **Addons → Bachs Payments → Status** and use **Verify saved gateway settings** to check the stored configuration. Configure webhooks and run cron before enabling **Accept new payments**. Check WHMCS's **Show on Order Form** when you want clients to use the gateway.
 
+## Optional payment activity addon
+
+Activate **Bachs Payments** under WHMCS's **Addon Modules** settings and select the administrator roles that should have access. Open **Addons → Bachs Payments** for payment records, refund requests, webhook checks, review items and diagnostics.
+
+The addon uses native WHMCS controls. It has no API keys, currency switches or checkout settings; those stay in **Payment Gateways → Bachs**. Deactivating the addon only removes its admin pages. Gateway payments, callbacks and background processing continue.
+
+Opening the addon does not contact Bachs or verify credentials. It can open before you finish gateway setup. Use **Verify saved gateway settings** when you want to check the saved connection.
 
 ## Webhooks
 
-Open **Payment Gateways → Bachs payment activity → Webhooks and jobs**. Copy the callback for the environment, including any WHMCS subdirectory:
+The optional addon shows callback URLs at **Addons → Bachs Payments → Webhooks and jobs**. You can also use the URLs below. Copy the callback for the environment, including any WHMCS subdirectory:
 
 ```text
 https://billing.example.com/modules/gateways/callback/bachs.php?environment=sandbox
@@ -38,7 +45,7 @@ A delivery is acknowledged after it is authenticated and queued. The worker chec
 
 ## Background processing
 
-The included hook uses the existing WHMCS cron. Run cron after configuring the gateway, then check worker status under **Bachs payment activity**. New invoice collection waits for a healthy worker.
+The included hook uses the existing WHMCS cron. Run cron after configuring the gateway, then check worker status under **Addons → Bachs Payments → Status** when the addon is enabled. New invoice collection waits for a healthy worker.
 
 For faster checks, run the optional CLI worker every minute using your actual paths:
 
@@ -66,7 +73,7 @@ Enable **USD checkout conversion** and adaptive pricing in Bachs to let clients 
 
 ## Refunds
 
-Open **Payment Gateways → Bachs payment activity → Payments**, inspect the payment, enter the refund amount and reason, and review the request before confirming. Some crypto refunds need a destination and network. Bachs permits only one nonfailed refund per payment, so a partial refund can prevent refunding the remainder later.
+Open **Addons → Bachs Payments → Payments**, inspect the payment, enter the refund amount and reason, and review the request before confirming. Some crypto refunds need a destination and network. Bachs permits only one nonfailed refund per payment, so a partial refund can prevent refunding the remainder later.
 
 Requests are asynchronous. Recheck an existing request after a timeout. After Bachs confirms success, use **Manual Refund Processed Externally / Record Only** on the WHMCS invoice with the displayed amount, transaction ID and original-payment link. Recheck the refund to finish the accounting task.
 
@@ -74,7 +81,7 @@ The native gateway does not expose a synchronous refund button. NGN bank-transfe
 
 ## Staff access and server settings
 
-Staff access uses WHMCS's normal permissions. The settings page requires **Configure Payment Gateways**. Refund actions also require **Refund Invoice Payments**, and diagnostic export requires **Client Data Export**. There is no addon role list.
+Payment settings require WHMCS's **Configure Payment Gateways** permission. The addon uses WHMCS's own addon role access and requires **List Transactions**. Refund actions also require **Refund Invoice Payments**, and diagnostic export requires **Client Data Export**. Staff who only manage payment activity do not need permission to edit gateway credentials.
 
 Block web access to `modules/gateways/bachs/lib/` and `modules/gateways/bachs/bin/`. Apache rules are included. Other web servers need equivalent rules. Keep the callback and client endpoints reachable.
 
@@ -83,10 +90,13 @@ The module uses WHMCS encryption. Back up the WHMCS encryption configuration tog
 ## Troubleshooting
 
 - **Gateway missing:** confirm the entry file is directly at `modules/gateways/bachs.php`, refresh All Payment Gateways, and check the WHMCS activity log. The gateway list does not need API credentials or module tables to discover Bachs.
-- **Settings not applied:** save the native gateway form, then verify the saved configuration. Correct the message shown under Bachs payment activity.
+- **Addon will not open:** check the displayed reference in **Utilities → Logs → Activity Log**. The message identifies missing files, database permissions, staff access or an invalid System URL. Upload the complete ZIP when files do not match. The database user needs permission to create the module tables and indexes on first use.
+- **Settings not applied:** save the native gateway form, then verify the saved configuration. Correct the message shown under Addons > Bachs Payments > Status.
 - **No payment recorded:** check signed deliveries, worker health and the review list. A browser return does not prove payment.
 - **Unknown outcome:** keep the existing request identity and recheck it before trying another payment.
 - **Signature rejected:** check the environment, secret, server clock, callback URL and proxy rules.
 - **Incomplete upload:** reinstall the complete folders. Packaged releases detect mixed files.
+
+Unexpected failures include a short reference in the Activity Log or private PHP/worker log if activity logging is unavailable. These entries include the error type and source location, without exception messages, SQL, keys or tokens. Include the reference and your WHMCS/PHP versions when reporting a problem.
 
 For later updates, back up the installation, enable maintenance, upload the complete folders and verify the gateway. Keep callbacks and cron running while financial work is pending.

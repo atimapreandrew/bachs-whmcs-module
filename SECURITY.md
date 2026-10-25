@@ -8,7 +8,7 @@ The module checks HTTPS certificates, fixed API hosts, signed webhook bytes/time
 
 Raw card/OTP entry stays at Bachs. Saved methods require client consent and ownership checks. Card saving and automatic collection start disabled. Sandbox payments require explicit confirmation that the installation is a test site.
 
-API/signing keys, provider card tokens, saved requests, and resumable checkout URLs are encrypted. Portal URLs are never stored. Staff access follows native WHMCS permissions. Configuration is stored in native gateway fields. Record views and diagnostic exports hide sensitive fields.
+API/signing keys, provider card tokens, saved requests, and resumable checkout URLs are encrypted. Portal URLs are never stored. Staff access follows native WHMCS permissions. The optional activity addon also uses WHMCS addon role access. Configuration is stored only in native gateway fields. Record views and diagnostic exports hide sensitive fields.
 
 ## Stored data
 

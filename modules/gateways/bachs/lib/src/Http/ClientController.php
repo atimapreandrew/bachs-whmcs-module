@@ -22,8 +22,11 @@ class ClientController
         $actor = $a->bridge->identity->client();
         $a->bridge->identity->csrf();
         (new RateLimit($a->store))->check('checkout:' . $actor['client_id'], 10);
-        $invoiceId = isset($_POST['invoice_id']) ? (int)$_POST['invoice_id'] : 0;
-        $gateway = isset($_POST['gateway']) && $_POST['gateway'] === 'bachs_card' ? 'bachs_card' : 'bachs';
+        $invoiceId = Input::number($_POST, 'invoice_id');
+        $gateway = Input::text($_POST, 'gateway', 'bachs', 16);
+        if (!in_array($gateway, array('bachs', 'bachs_card'), true)) {
+            throw new Failure('gateway_not_bachs');
+        }
         $r = (new Checkout($a))->start($invoiceId, $actor['client_id'], !empty($_POST['save_method']), $actor['actor'], $gateway);
         if ($this->wantsJson()) {
             $this->json($r);
@@ -40,7 +43,10 @@ class ClientController
         $a = $this->app;
         $actor = $a->bridge->identity->client();
         (new RateLimit($a->store))->check('status:' . $actor['client_id'], 60);
-        $id = isset($_GET['attempt_id']) && is_string($_GET['attempt_id']) ? $_GET['attempt_id'] : '';
+        $id = Input::text($_GET, 'attempt_id', '', 48);
+        if (!preg_match('/^[a-f0-9]{48}$/D', $id)) {
+            throw new Failure('invalid_resource_id');
+        }
         $attempt = $a->store->get('attempts', $id);
         if (!$attempt || (int)$attempt['client_id'] !== (int)$actor['client_id']) {
             throw new Failure('invoice_access_denied');
@@ -140,7 +146,7 @@ class ClientController
         $a = $this->app;
         $actor = $a->bridge->identity->client();
         $a->bridge->identity->csrf();
-        $action = isset($_POST['action']) ? $_POST['action'] : '';
+        $action = Input::text($_POST, 'action', '', 16);
         if ($action === 'portal') {
             $this->redirect((new SavedMethods($a))->portal($actor['client_id']));
             return;
@@ -154,7 +160,7 @@ class ClientController
             return;
         }
         if ($action === 'revoke') {
-            (new SavedMethods($a))->revoke(isset($_POST['method_id']) ? $_POST['method_id'] : '', $actor['client_id']);
+            (new SavedMethods($a))->revoke(Input::text($_POST, 'method_id', '', 48), $actor['client_id']);
             $this->redirect(ClientView::methodsUrl($a));
             return;
         }
@@ -164,12 +170,20 @@ class ClientController
     public function fail($error)
     {
         $reason = $error instanceof Failure ? $error->reason : 'internal_error';
-        $status = $reason === 'rate_limited' ? 429 : (strpos($reason, 'access_denied') !== false ? 403 : 400);
+        $unexpected = !$error instanceof Failure || $reason === 'internal_error';
+        $message = Messages::error($reason);
+        $reference = null;
+        if ($unexpected) {
+            $report = \Bachs\Whmcs\Infrastructure\Diagnostics::report($error, 'client_request');
+            $reference = $report['reference'];
+            $message = 'Bachs could not complete this request. Please try again later. Reference: ' . $reference;
+        }
+        $status = $unexpected ? 500 : ($reason === 'rate_limited' ? 429 : (strpos($reason, 'access_denied') !== false || $reason === 'csrf_required' ? 403 : 400));
         http_response_code($status);
         if ($this->wantsJson()) {
-            $this->json(array('error' => $reason, 'message' => Messages::error($reason)), $status);
+            $this->json(array('error' => $reason, 'message' => $message, 'reference' => $reference), $status);
         } else {
-            $this->page('Payment request', '<p>' . SafeData::html(Messages::error($reason)) . '</p>');
+            $this->page('Payment request', '<p>' . SafeData::html($message) . '</p>');
         }
     }
 

@@ -8,6 +8,9 @@ if (version_compare(PHP_VERSION, '7.2.0', '<')) {
     throw new RuntimeException('Bachs requires PHP 7.2 or later on a supported WHMCS release.');
 }
 $bachsWhmcsVersion = defined('WHMCS_VERSION') ? WHMCS_VERSION : (isset($GLOBALS['CONFIG']['Version']) ? $GLOBALS['CONFIG']['Version'] : null);
+if ($bachsWhmcsVersion === null && class_exists('WHMCS\\Config\\Setting')) {
+    $bachsWhmcsVersion = \WHMCS\Config\Setting::getValue('Version');
+}
 if ($bachsWhmcsVersion !== null && version_compare($bachsWhmcsVersion, '8.0', '<')) {
     throw new RuntimeException('Bachs requires WHMCS 8.0 or later.');
 }

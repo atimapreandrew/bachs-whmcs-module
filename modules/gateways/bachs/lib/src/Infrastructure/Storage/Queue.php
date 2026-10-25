@@ -27,7 +27,15 @@ class Queue implements \Bachs\Whmcs\Domain\JobQueue
 
     public function wake($job, $includeDead = false)
     {
-        $this->store->run("UPDATE mod_bachs_jobs SET state='ready',next_run=? WHERE id=? AND state IN (" . ($includeDead ? "'done','dead','retry'" : "'done'") . ")", array($this->store->clock->now(), $job['id']));
+        $current = $this->store->get('jobs', $job['id']);
+        if (!$current || !in_array($current['state'], $includeDead ? array('done','dead','retry') : array('done'), true)) {
+            return;
+        }
+        $data = $current['data'];
+        $data['tries'] = 0;
+        $data['error_code'] = null;
+        $this->store->run("UPDATE mod_bachs_jobs SET state='ready',data=?,next_run=?,updated_at=? WHERE id=? AND state=? AND data=?",
+            array(json_encode($data), $this->store->clock->now(), $this->store->clock->now(), $job['id'], $current['state'], json_encode($current['data'])));
     }
 
     public function claim()
@@ -50,11 +58,11 @@ class Queue implements \Bachs\Whmcs\Domain\JobQueue
         $data['tries'] = $tries;
         $data['error_code'] = $error;
         $state = $retry === null ? 'done' : ($tries >= 12 ? 'dead' : 'retry');
-        $this->store->run(
+        $updated = $this->store->run(
             'UPDATE mod_bachs_jobs SET state=?,data=?,lease_until=0,lease_token=\'\',next_run=?,updated_at=? WHERE id=? AND lease_token=?',
             array($state, json_encode($data), $this->store->clock->now() + (int)$retry, $this->store->clock->now(), $job['id'], $job['lease_token'])
-        );
-        if ($state === 'dead') {
+        )->rowCount();
+        if ($updated && $state === 'dead') {
             $this->store->exception($job['scope'], 'job_exhausted', $job['id'], array('error_code' => $error));
         }
     }
