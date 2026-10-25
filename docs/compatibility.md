@@ -18,7 +18,7 @@ These are implementation targets. **No licensed WHMCS version has been verified 
 
 The recorded local run uses PHP 8.4.2 on macOS and PDO SQLite. It covers syntax checks, selected old-PHP token checks, fake provider/native flows, exact money, signatures, retry recovery, and an eight-process duplicate-payment test. JavaScript tests use a small simulated DOM.
 
-No real Bachs sandbox transaction, licensed WHMCS installation, MySQL/MariaDB server, or rendered browser/theme run has been verified. Older PHP executables were not used. A token check is not an actual PHP 5.6 runtime test. GitHub Actions is configured for local tests on PHP 8.2, 8.3, and 8.4; see its actual runs before claiming a pass.
+No real Bachs sandbox transaction, licensed WHMCS installation, MySQL/MariaDB server, or rendered browser/theme run has been verified. Older PHP executables were not used. A token check is not an actual PHP 5.6 runtime test. Run the local checks on each PHP version before claiming that it has been tested.
 
 ## Before claiming support
 

@@ -11,7 +11,7 @@ Initial payment integration for WHMCS:
 - Staff payment settings, refund records, review items, diagnostics, and audit history.
 - One installation ZIP for all version targets, with file integrity checks.
 
-Prepared for public use with MIT licensing, author credit, plain-English guides, contributor notes, and a GitHub Actions check workflow. Old planning material and unused helpers were removed from the public source.
+Prepared for public use with MIT licensing, author credit, plain-English guides, contributor notes, and local test/build commands. Old planning material and unused helpers were removed from the public source.
 
 The module is limited to WHMCS payments. Merchant payout tools, Connect/split transfers, virtual-account creation, dispute-evidence tools, and Bachs-managed subscriptions are excluded. Existing database history is preserved.
 

@@ -14,7 +14,7 @@ make package
 
 `make test` runs PHP and client JavaScript tests. `make check` checks syntax, selected security rules, documentation links, and the old-PHP syntax target. `make package` runs those checks, then builds and checks the installation ZIP. Generated files stay in `dist/` and are not committed.
 
-GitHub Actions is configured to run these checks on PHP 8.2, 8.3, and 8.4. That workflow tests the local harness; it does not prove licensed WHMCS or real Bachs compatibility.
+Run these commands locally before submitting a change. GitHub Actions is optional and is not included in this repository. Local tests do not prove licensed WHMCS or real Bachs compatibility.
 
 ## Code rules
 

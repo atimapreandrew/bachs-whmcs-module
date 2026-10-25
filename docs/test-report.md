@@ -13,7 +13,7 @@
 
 The recorded run used PHP 8.4.2 on macOS, PDO SQLite, and Node.js 25.7.0. An eight-process SQLite test checks that one receipt cannot be posted twice. [test-results.json](test-results.json) records the PHP test totals. These are local results, not provider or licensed WHMCS acceptance.
 
-GitHub Actions is configured to run local checks on PHP 8.2, 8.3, and 8.4. A configured workflow is not evidence that those hosted runs have passed. Read the actual Actions results after publication.
+No GitHub Actions workflow is included. Run `make test`, `make check`, and `make package` locally. These checks do not establish compatibility with PHP versions or WHMCS installations that have not been tested.
 
 ## Still required before production use
 
