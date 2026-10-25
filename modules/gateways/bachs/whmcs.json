@@ -1,0 +1,29 @@
+{
+  "schema": "1.0",
+  "type": "whmcs-gateways",
+  "name": "bachs",
+  "license": "MIT",
+  "category": "gateway",
+  "description": {
+    "name": "Bachs",
+    "tagline": "Accept invoice payments with Bachs hosted or overlay checkout.",
+    "long": "Accept invoice payments with Bachs hosted or overlay checkout. Configure the integration in the native Bachs payment gateway settings. Requires WHMCS 8.0 or later.",
+    "features": [
+      "Native WHMCS gateway configuration",
+      "Verified payment confirmation",
+      "WHMCS billing and invoice accounting"
+    ]
+  },
+  "support": {
+    "homepage": "https://github.com/atimapreandrew/bachs-whmcs-module",
+    "learn_more": "https://github.com/atimapreandrew/bachs-whmcs-module#readme",
+    "support_url": "https://github.com/atimapreandrew/bachs-whmcs-module/issues",
+    "docs_url": "https://github.com/atimapreandrew/bachs-whmcs-module/blob/main/docs/installation.md"
+  },
+  "authors": [
+    {
+      "name": "Andrew Atimapre",
+      "homepage": "https://github.com/atimapreandrew"
+    }
+  ]
+}

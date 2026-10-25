@@ -1,93 +1,92 @@
 # Installation
 
-Check that web PHP and cron PHP meet WHMCS's requirements and provide cURL, OpenSSL, JSON, and PDO MySQL. The database needs InnoDB and utf8mb4, and the WHMCS System URL must use HTTPS.
+Requires WHMCS 8.0 or later. Use the PHP version supported by your WHMCS release, with cURL, OpenSSL, JSON and PDO MySQL available to both web requests and cron. The database needs InnoDB and utf8mb4. Set the WHMCS System URL to an HTTPS address.
 
-## Install the module
+## Upload and activate
 
-1. Back up WHMCS and its database.
-2. Extract the installation ZIP into the WHMCS root. Keep its folder structure.
-3. Activate **Bachs** under addon modules and allow the staff roles that need access.
-4. Open **Addons > Bachs > Connection & settings**. Select Sandbox, enter your sandbox secret API key, and verify it.
-5. On your test site, confirm **This is a separate WHMCS test installation**. Sandbox collection stays blocked until this is confirmed.
-6. Set up webhooks below, run cron once, then enable new payments.
-7. Activate the **Bachs** payment gateway. Leave **Convert To For Processing** disabled.
+1. Upload the supplied `modules/` and `includes/` folders into the WHMCS root.
+2. Confirm that `modules/gateways/bachs.php`, `modules/gateways/bachs/lib/autoload.php` and `includes/hooks/bachs.php` exist. Upload the whole folders, not just the gateway PHP file.
+3. Open WHMCS's **Payment Gateways** interface and activate **Bachs**. Recent versions also expose the list through **Apps & Integrations → All Payment Gateways**.
+4. Open **Manage Existing Gateways** and configure **Bachs** with the native WHMCS fields.
+5. Keep **Convert To For Processing** disabled. Use Bachs's own USD conversion setting when needed.
 
-The addon creates only its own tables. Credentials are encrypted using WHMCS's encryption functions. Blank secret fields keep the saved values. No private JSON file is needed, and PHP/WHMCS upgrades do not require a version certificate.
+The source folders are directly installable; no build step is needed on the WHMCS server. The release ZIP also includes checksums and a file-integrity manifest. The gateway creates its own tables on first runtime use. There is no addon, import step or separate settings file.
 
-On WHMCS 7.0–7.1, set the addon's **Local API execution identity** to a specific active admin username for callbacks and cron. No admin password is stored. If encryption is needed before that identity is saved, configure an optional dedicated key as described under server settings.
+## Gateway settings
+
+Select **Sandbox** or **Live** and enter the matching secret API key and webhook signing secret. WHMCS stores these as password fields. Sandbox payments also require **Separate test installation**. Use sandbox only on a separate test site.
+
+Choose the accepted invoice currencies and payment methods with the checkboxes. At least one currency and one method must be selected. Add the same currency codes in WHMCS's currency settings. Bachs applies account approval, availability and payment minimums.
+
+Choose hosted checkout or overlay checkout. You can also set the button text, checkout expiry, completed-link retention and maintenance mode. Maintenance blocks new payments while pending financial work finishes.
+
+Save the native form first. Under **Bachs payment activity → Status**, use **Verify saved gateway settings** to check the stored configuration. Configure webhooks and run cron before enabling **Accept new payments**. Check WHMCS's **Show on Order Form** when you want clients to use the gateway.
+
 
 ## Webhooks
 
-In the addon's **Webhooks** page, copy the URL for the selected environment, including any WHMCS subdirectory. Register it in the Bachs dashboard with event source `account`. Subscribe to the event names shown by the module, then save the signing secret in the addon.
+Open **Payment Gateways → Bachs payment activity → Webhooks and jobs**. Copy the callback for the environment, including any WHMCS subdirectory:
 
-API keys and signing secrets stay out of callback URLs. An accepted event is queued for checking; the native invoice transaction confirms that accounting finished. When replacing a secret, the old local value is accepted for up to 24 hours. Follow Bachs's current rotation process and check a real signed delivery afterward.
+```text
+https://billing.example.com/modules/gateways/callback/bachs.php?environment=sandbox
+https://billing.example.com/modules/gateways/callback/bachs.php?environment=live
+```
+
+Register the callback in Bachs with event source `account`. Subscribe to the events shown on that page, then save the matching signing secret in the native gateway form. Keys and secrets never belong in callback URLs.
+
+A delivery is acknowledged after it is authenticated and queued. The worker checks the actual provider payment before posting a native transaction. Changing a signing secret retains the previous local secret for up to 24 hours; follow Bachs's rotation process and verify a signed delivery afterward.
 
 ## Background processing
 
-The included hook uses your existing WHMCS cron to check pending payments and refunds. Run cron once after connecting Bachs so the module can confirm that background processing works.
+The included hook uses the existing WHMCS cron. Run cron after configuring the gateway, then check worker status under **Bachs payment activity**. New invoice collection waits for a healthy worker.
 
-For faster checks, you can also run the CLI worker every minute using your real paths:
+For faster checks, run the optional CLI worker every minute using your actual paths:
 
 ```cron
 * * * * * /path/to/php /path/to/whmcs/modules/gateways/bachs/bin/worker.php --limit=50 --seconds=20 >> /private/logs/bachs-worker.log 2>&1
 ```
 
-Keep logs private. Multiple workers use database leases to avoid duplicate work. Do not add a public HTTP cron endpoint.
+Keep logs private. Database leases coordinate multiple workers. Do not add a public HTTP cron endpoint.
 
 ## Saved cards and renewals
 
-Card saving and automatic billing are separate options and start disabled. To use them, enable card saving, test customer consent and card management, then enable automatic card payments and activate `bachs_card`. Native automatic billing requires WHMCS 7.9 or later. The worker enrolls existing active, consented cards when automatic billing is enabled.
+Enable **Save cards** in the main **Bachs** gateway. USD cards can be added without payment; NGN cards can be saved during an invoice payment. Clients manage them from WHMCS's normal **Payment Methods** page. Card details are entered at Bachs.
 
-WHMCS still creates invoices and controls renewal dates. Each charge requires an active method owned by that client, recorded consent, and the same invoice currency. Clients can turn off local automatic payments and manage their provider cards through Bachs. USD cards can be added without a charge; NGN cards are saved during an invoice payment. Native card input keeps the invoice and current amount together, asks for consent, then opens Bachs. To replace a card, add a new Pay Method and remove the old one; existing card tokens cannot be edited in place.
+For automatic collection, activate the optional **Bachs saved card** gateway and enable **Automatic card payments** in the main Bachs settings. Use Bachs saved card for the invoices that should use automatic billing. The worker enrolls active, consented cards as native WHMCS Pay Methods.
+
+WHMCS creates renewal invoices and controls collection dates. Each charge requires an owned active method, consent and the same invoice currency. Disabling a card method blocks new charges through that method. To replace a card, add a new Pay Method and remove the old one. Existing card tokens cannot be edited in place.
+
+## Currencies and conversion
+
+The invoice currencies are USD, NGN, GHS, KES, MWK, RWF, TZS, UGX, XAF, XOF and ZMW. Methods include USD/NGN cards, NGN bank transfer and mobile money for the other nine currencies.
+
+The **Crypto** switch controls crypto collection for USD invoices. Its supported assets are USDT_TRC20, USDT_BEP20, USDT_ERC20, USDT_SOL, USDC_BEP20, ETH_ETH, SOL_SOL and BNB_BEP20. Individual assets and networks are selected in Bachs. Crypto codes are collection assets, not invoice pricing currencies.
+
+Enable **USD checkout conversion** and adaptive pricing in Bachs to let clients pay USD invoices through eligible local currencies or crypto. The module verifies the payment and allocates the original USD invoice amount. Other invoice currencies collect in their own currency. Card saving always uses the invoice's USD or NGN card method.
 
 ## Refunds
 
-Open **Addons > Bachs > Payments**, select a recorded payment, enter the amount and reason, review the original payment, and confirm. Refund requests start in the addon because Bachs completes them asynchronously. The native gateway does not expose a synchronous refund action. Some crypto refunds also need a verified destination and network. Only one nonfailed refund is allowed per payment; a partial refund can prevent a later refund of the remainder.
+Open **Payment Gateways → Bachs payment activity → Payments**, inspect the payment, enter the refund amount and reason, and review the request before confirming. Some crypto refunds need a destination and network. Bachs permits only one nonfailed refund per payment, so a partial refund can prevent refunding the remainder later.
 
-Refunds are asynchronous. Recheck the existing request after a timeout instead of submitting another. Once Bachs confirms success, use **Manual Refund Processed Externally / Record Only** on the WHMCS invoice with the displayed amount, transaction ID, and original-payment link. Recheck in Bachs to close the accounting task. The module does not automatically insert outgoing refund accounting.
+Requests are asynchronous. Recheck an existing request after a timeout. After Bachs confirms success, use **Manual Refund Processed Externally / Record Only** on the WHMCS invoice with the displayed amount, transaction ID and original-payment link. Recheck the refund to finish the accounting task.
 
-NGN bank-transfer refunds are unsupported. Partial currency mappings must be verified. Imported dashboard partial refunds start without a guessed invoice amount and need a reviewed mapping before native recording.
+The native gateway does not expose a synchronous refund button. NGN bank-transfer refunds are unsupported. Partial refunds require a verified invoice-currency mapping.
 
-## Live payments and advanced settings
+## Staff access and server settings
 
-Test actual checkout, failure, expiry, duplicate notifications, cron recovery, refunds, and your themes. Enter and verify the live key, register the live callback/secret, select Live, and enable payments. Never test sandbox payments on ordinary production invoices.
+Staff access uses WHMCS's normal permissions. The settings page requires **Configure Payment Gateways**. Refund actions also require **Refund Invoice Payments**, and diagnostic export requires **Client Data Export**. There is no addon role list.
 
-## Currencies and payment methods
+Block web access to `modules/gateways/bachs/lib/` and `modules/gateways/bachs/bin/`. Apache rules are included. Other web servers need equivalent rules. Keep the callback and client endpoints reachable.
 
-In **Connection & settings**, enable the invoice currencies you accept: USD, NGN, GHS, KES, MWK, RWF, TZS, UGX, XAF, XOF and ZMW. Add matching currency codes in WHMCS's currency settings. Existing currency selections are preserved when upgrading. Add-funds and mass-payment invoices are unsupported.
+The module uses WHMCS encryption. Back up the WHMCS encryption configuration together with the database. No separate module encryption key is needed.
 
-Under **Payment methods**, choose **All available Bachs methods**, or **Only the methods selected below** and check the options you want:
+## Troubleshooting
 
-- USD cards and NGN cards, including supported card wallets where available.
-- NGN bank transfer.
-- Mobile money for GHS, KES, MWK, RWF, TZS, UGX, XAF, XOF and ZMW.
-- Crypto: USDT_TRC20, USDT_BEP20, USDT_ERC20, USDT_SOL, USDC_BEP20, ETH_ETH, SOL_SOL and BNB_BEP20.
+- **Gateway missing:** confirm the entry file is directly at `modules/gateways/bachs.php`, refresh All Payment Gateways, and check the WHMCS activity log. The gateway list does not need API credentials or module tables to discover Bachs.
+- **Settings not applied:** save the native gateway form, then verify the saved configuration. Correct the message shown under Bachs payment activity.
+- **No payment recorded:** check signed deliveries, worker health and the review list. A browser return does not prove payment.
+- **Unknown outcome:** keep the existing request identity and recheck it before trying another payment.
+- **Signature rejected:** check the environment, secret, server clock, callback URL and proxy rules.
+- **Incomplete upload:** reinstall the complete folders. Packaged releases detect mixed files.
 
-The Crypto switch controls the whole crypto method for WHMCS. Individual assets and networks follow your Bachs account's checkout settings. Bachs applies account approval, availability and payment minimums. Enabling an option in WHMCS cannot grant a method your Bachs account does not support. Card wallets follow Bachs's card support; they are not separate API corridors.
-
-**Let clients pay USD invoices in another supported currency, including crypto** accepts Bachs conversion while retaining the USD invoice amount. Enable adaptive pricing in your Bachs account too. Other invoice currencies always collect in their own currency; Bachs does not convert those at checkout. Turn this option off to offer only methods that collect the invoice currency. Crypto is available for USD invoice checkout with conversion enabled. Crypto assets are never used as invoice pricing currencies. Pending receipts retain the policy saved when their checkout began. Incomplete collection or a changed invoice sends a receipt to review.
-
-Card saving restricts checkout to the enabled card method in the invoice currency (USD or NGN). Adding a card without payment requires USD cards. Disabling a card method also blocks new automatic charges on that corridor. Existing payments continue to reconcile when a currency is disabled.
-
-Advanced settings control checkout expiry and saved-link retention.
-
-Staff access uses normal WHMCS addon access and native role permissions. Refunds require **Refund Invoice Payments**; diagnostic export requires **Client Data Export**. There is no second module role list.
-
-## Server settings
-
-Block web access to `modules/gateways/bachs/lib/` and `modules/gateways/bachs/bin/`. Apache rules are included. Other servers need equivalent rules for the exact installation path. Keep the callback and client endpoints reachable.
-
-An optional `BACHS_ENCRYPTION_KEY` can replace native WHMCS encryption. Use a securely generated value of at least 32 bytes, outside the web root, with the same environment for web and cron PHP. Back it up. Do not switch encryption methods or replace an existing key without a tested migration.
-
-## Troubleshooting and upgrades
-
-- **No payment recorded:** check the signed webhook, worker health, provider receipt, and review items. A browser return is not proof of payment.
-- **Unknown request result:** keep its original identity and recheck. Do not delete it to create a replacement.
-- **Signature rejected:** check the secret, environment, server clock, exact callback URL, and proxy/WAF rules.
-- **Dead job:** fix its cause, then use authorized Replay/Recheck. Exhausted jobs do not restart automatically.
-- **Review needed:** inspect the actual amount, currency, customer, source, and current invoice. A review note does not allocate money.
-- **Incomplete upload:** reinstall the complete package. Keep the file integrity check enabled.
-
-Before upgrading, back up files/data, stop new payments with maintenance mode, and keep callbacks and cron running. Upload the whole package, run the addon upgrade step, and test again. Preserve original keys and pending records. If moving from an old development build, do not enable automatic billing while any separately created Bachs subscription remains active.
-
-Deactivation stops new collections and preserves financial history. Finish or hand over pending payments and refund accounting before removing files, the module's webhook endpoint, and finally its cron entry. Module tables are kept by default; no destructive purge is included.
+For later updates, back up the installation, enable maintenance, upload the complete folders and verify the gateway. Keep callbacks and cron running while financial work is pending.

@@ -33,7 +33,7 @@ try {
     $safe = array('invalid_signature' => 401, 'invalid_environment' => 400, 'event_scope_mismatch' => 403, 'webhook_too_large' => 413, 'event_identity_collision' => 409, 'malformed_signed_event' => 400, 'rate_limited' => 429);
     http_response_code(isset($safe[$e->reason]) ? $safe[$e->reason] : 503);
     echo json_encode(array('error' => isset($safe[$e->reason]) ? $e->reason : 'storage_unavailable'));
-} catch (Exception $e) {
+} catch (Throwable $e) {
     http_response_code(503);
     echo '{"error":"storage_unavailable"}';
 }

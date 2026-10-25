@@ -7,7 +7,7 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-PUBLIC_FOLDERS = ('src', 'modules', 'includes', 'resources', 'tests', 'build', 'docs', '.github')
+PUBLIC_FOLDERS = ('modules', 'includes', 'tests', 'build', 'docs', '.github')
 
 
 def main():

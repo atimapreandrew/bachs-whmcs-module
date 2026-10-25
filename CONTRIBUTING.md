@@ -12,12 +12,12 @@ make check
 make package
 ```
 
-The package is written to `dist/bachs-whmcs-1.0.0.zip`, with a checksum file. Upload that package's contents to WHMCS, not the source checkout. Generated files are ignored by Git. No GitHub workflow is required.
+The package is written to `dist/bachs-whmcs-1.0.0.zip`, with a checksum file. The source `modules/` and `includes/` folders are also directly installable. No server build is required. Generated files are ignored by Git. No GitHub workflow is required.
 
 ## Code rules
 
 - Use clear names, four spaces, and simple English.
-- Keep shipped PHP within the PHP 5.6 syntax target; use the PHP version required by WHMCS at runtime.
+- Target WHMCS 8.0 and later. Keep runtime syntax compatible with PHP 7.2, and use the PHP version required by the installed WHMCS release.
 - Keep money as exact decimal strings, never floats.
 - Save provider writes before sending them. Check an unknown result instead of starting a replacement charge.
 - Route payment recognition through the shared service and use native WHMCS accounting helpers.

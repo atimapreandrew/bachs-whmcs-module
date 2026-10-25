@@ -6,7 +6,7 @@ require_once __DIR__ . '/bootstrap.php';
 try {
     $controller = new \Bachs\Whmcs\Http\ClientController(\Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app());
     $controller->checkout();
-} catch (Exception $e) {
+} catch (Throwable $e) {
     if (isset($controller)) {
         $controller->fail($e);
     } else {

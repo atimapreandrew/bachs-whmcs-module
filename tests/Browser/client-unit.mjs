@@ -2,7 +2,7 @@
 import vm from 'node:vm';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const source = fs.readFileSync(new URL('../../resources/assets/bachs.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../../modules/gateways/bachs/assets/bachs.js', import.meta.url), 'utf8');
 let passed = 0;
 const flush = async () => { for (let i=0;i<12;i++) await Promise.resolve(); };
 function fixture({url='https://checkout.bachs.io/c/synthetic', sdk=false, fetchEnabled=true, delay=false}={}) {

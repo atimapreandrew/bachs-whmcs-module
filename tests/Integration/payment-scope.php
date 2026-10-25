@@ -67,14 +67,14 @@ test('Admin settings do not expose removed tools even with their old feature fla
     $oldGet = $_GET;
     $oldServer = $_SERVER;
     try {
-        $_GET = array('page' => 'settings');
+        $_GET = array('bachs_page' => 'overview');
         $_SERVER['REQUEST_METHOD'] = 'GET';
-        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'addonmodules.php?module=bachs_admin'))->render();
+        $html = (new \Bachs\Whmcs\Http\AdminView($a, 'configgateways.php'))->render();
         foreach (array('finance','connect','disputes','subscriptions') as $page) {
             same(false, strpos($html, '&amp;page=' . $page) !== false);
         }
         same(false, strpos($html, 'name="feature_') !== false);
-        truth(strpos($html, 'Save payment settings') !== false);
+        truth(strpos($html, 'Verify saved gateway settings') !== false);
     } finally {
         $_GET = $oldGet;
         $_SERVER = $oldServer;

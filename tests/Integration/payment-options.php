@@ -7,6 +7,7 @@ use Bachs\Whmcs\Application\PaymentRecognition;
 use Bachs\Whmcs\Application\SavedMethods;
 use Bachs\Whmcs\Http\CardInput;
 use Bachs\Whmcs\Http\ClientController;
+use Bachs\Whmcs\Http\ClientView;
 
 foreach (array_keys(PaymentOptions::currencies()) as $currency) {
     test('Invoice collection and native allocation in ' . $currency, function () use ($currency) {
@@ -134,7 +135,11 @@ test('Native card input preserves invoice context without a provider write durin
     same(false, strpos($form, 'target="_top"') !== false);
     same(0, count($p->calls));
     $_POST = array('confirmation' => $intent, 'step' => 'review');
-    ob_start(); (new ClientController($a))->card(); $review = ob_get_clean();
+    ob_start(); (new ClientController($a))->card(); $redirectBody = ob_get_clean();
+    same('', $redirectBody);
+    $_GET = array('rp' => '/account/paymentmethods', 'bachs_card_intent' => $intent);
+    $review = ClientView::render($a, array('templatefile' => 'account-paymentmethods'));
+    $_GET = array();
     truth(strpos($review, 'Pay invoice #42') !== false);
     truth(strpos($review, 'name="consent"') !== false);
     truth(strpos($review, 'target="_top"') !== false);
@@ -180,8 +185,11 @@ test('Native add-only setup and its return/status do not read invoice zero', fun
     ob_start(); (new ClientController($a))->status(); $status = json_decode(ob_get_clean(), true);
     same('open', $status['state']);
     ob_start(); (new ClientController($a))->returnPage(); $html = ob_get_clean();
-    truth(strpos($html, 'Card setup status') !== false);
-    truth(strpos($html, 'Return to payment settings') !== false);
+    same('', $html);
+    $_GET['bachs_attempt'] = $at['id'];
+    $native = ClientView::render($a, array());
+    truth(strpos($native, 'data-bachs-return') !== false);
+    truth(strpos($status['invoice_url'], '/account/paymentmethods') !== false);
     $a->bridge->identity->clientId = 2;
     fails('invoice_access_denied', function () use ($a) { (new ClientController($a))->status(); });
     $_GET = array(); $_SERVER['PATH_INFO'] = ''; $_SERVER['REQUEST_METHOD'] = 'POST';

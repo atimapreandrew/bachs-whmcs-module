@@ -38,9 +38,9 @@ def main():
         'modules/gateways/bachs.php',
         'modules/gateways/bachs_card.php',
         'modules/gateways/bachs/card.php',
+        'modules/gateways/bachs/whmcs.json',
+        'modules/gateways/bachs_card/whmcs.json',
         'modules/gateways/callback/bachs.php',
-        'modules/addons/bachs_admin/bachs_admin.php',
-        'modules/addons/bachs_admin/templates/client.tpl',
         'includes/hooks/bachs.php',
     )
 
@@ -56,6 +56,8 @@ def main():
             if re.search(rb'sk_(?:live|sandbox)_[A-Za-z0-9_-]{16,}|whsec_[A-Za-z0-9_-]{16,}', archive.read(name)):
                 errors.append('Possible credential in: ' + name)
 
+        if any(name.startswith('modules/addons/') or name.endswith('.css') for name in names):
+            errors.append('Addon or custom stylesheet shipped in the gateway package')
         for removed in ('Connect', 'Finance', 'Disputes', 'Subscriptions'):
             if library_path + 'src/Application/' + removed + '.php' in names:
                 errors.append('Removed merchant service shipped: ' + removed)
@@ -64,7 +66,7 @@ def main():
                 errors.append('Missing required file: ' + name)
 
         manifest = json.loads(archive.read(library_path + 'release.json'))
-        if manifest.get('version') != VERSION or manifest.get('target_whmcs') != '7.0–9.1':
+        if manifest.get('version') != VERSION or manifest.get('target_whmcs') != '8.0+' or manifest.get('minimum_whmcs') != '8.0.0':
             errors.append('Incorrect package version or target metadata')
         for name, expected in manifest['components'].items():
             if hashlib.sha256(archive.read(name)).hexdigest() != expected:

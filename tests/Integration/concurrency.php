@@ -17,6 +17,7 @@ test('Eight concurrent processes cannot post one receipt twice', function () {
     for ($i = 0; $i < 8; ++$i) {
         $pid = pcntl_fork();
         if ($pid === 0) {
+            while (ob_get_level() > 0) { ob_end_clean(); }
             $pdo = new PDO($dsn);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $pdo->exec('PRAGMA busy_timeout=5000');

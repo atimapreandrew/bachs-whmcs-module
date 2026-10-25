@@ -1,13 +1,14 @@
 <?php
 
 require_once dirname(__DIR__) . '/autoload.php';
+require_once __DIR__ . '/Support/EncryptedSecrets.php';
 
 use Bachs\Whmcs\Application\Engine;
 use Bachs\Whmcs\Application\Settings;
 use Bachs\Whmcs\Domain\Failure;
 use Bachs\Whmcs\Domain\Money;
 use Bachs\Whmcs\Infrastructure\Bachs\ApiFailure;
-use Bachs\Whmcs\Infrastructure\Storage\EncryptedSecrets;
+use Bachs\Whmcs\Tests\EncryptedSecrets;
 use Bachs\Whmcs\Infrastructure\Storage\Schema;
 use Bachs\Whmcs\Infrastructure\Storage\Store;
 
@@ -231,7 +232,6 @@ function environment($database = 'sqlite::memory:')
     $settings->set('enabled', true);
     $settings->set('test_installation', true);
     $settings->set('adaptive_allocation', false);
-    $settings->set('collection_precision', array('USDT_TRC20' => 6));
     $settings->saveSecret('signing_' . $scope['id'], 'synthetic_signing_secret_for_tests');
     $app = new Engine($store, $settings, $bridge, function ($s) use ($provider) {
         return $provider;

@@ -70,7 +70,7 @@ test('Webhook charge naming never replaces the canonical REST payment identity',
     list($a,$p,$w) = environment();
     $at = beginPayment($a);
     $p->succeed($at);
-    same('posted', (new \Bachs\Whmcs\Application\PaymentRecognition($a))->reconcile($at['id'], 'legacy_charge_alias'));
+    same('posted', (new \Bachs\Whmcs\Application\PaymentRecognition($a))->reconcile($at['id'], 'untrusted_charge_hint'));
     same(1, $w->posts);
 });
 test('Unsafe provider text and full card tokens are excluded from admin inspection', function () {

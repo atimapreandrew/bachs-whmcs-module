@@ -50,9 +50,9 @@ test('The native card version boundary cannot be bypassed by a saved setting', f
     list($app, $provider, $native) = environment();
     $app->settings->set('saved_methods', true);
     $app->settings->set('automatic_payments', true);
-    $native->version = '7.8.3';
+    $native->version = '7.10.3';
     $native->invoices[42]['gateway'] = 'bachs_card';
-    fails('native_card_version_not_supported', function () use ($app) {
+    fails('whmcs_version_not_supported', function () use ($app) {
         (new SavedMethods($app))->capture(42, 'unknown_method');
     });
     same(0, $provider->writes('/v1/charges'));
@@ -74,17 +74,6 @@ test('Unknown converted currency precision holds the actual receipt without post
     $provider->payments[$paymentId]['currency'] = 'UNCONFIGURED_ASSET';
     same('review', (new PaymentRecognition($app))->reconcile($attempt['id']));
     same(0, $native->posts);
-});
-
-test('Converted precision settings reject malformed input before saving payment policy', function () {
-    list($app) = environment();
-    fails('invalid_collection_precision', function () use ($app) {
-        (new Connection($app))->save(array('collection_precision' => 'USDT_TRC20=99'), 'admin:10');
-    });
-    same(true, $app->settings->get('enabled'));
-    (new Connection($app))->save(array('collection_precision' => "USDT_TRC20=6\nRWF=0"), 'admin:10');
-    same(6, $app->settings->collectionPrecision('USDT_TRC20'));
-    same(0, $app->settings->collectionPrecision('RWF'));
 });
 
 test('Removed API webhook registration cannot be triggered by an old form', function () {

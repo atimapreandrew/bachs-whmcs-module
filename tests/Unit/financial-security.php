@@ -3,7 +3,6 @@
 use Bachs\Whmcs\Domain\Money;
 use Bachs\Whmcs\Infrastructure\Bachs\SignatureVerifier;
 use Bachs\Whmcs\Infrastructure\Bachs\Urls;
-use Bachs\Whmcs\Infrastructure\Storage\EncryptedSecrets;
 use Bachs\Whmcs\Infrastructure\SafeData;
 
 test('Decimal arithmetic retains precision beyond machine integer range', function () {
@@ -41,20 +40,6 @@ test('Huge values overflow the explicit domain bound, not machine integers', fun
         Money::normalize(str_repeat('9', 37));
     });
 });
-test('Authenticated encryption round trip rejects tampering and wrong keys', function () {
-    $v = new EncryptedSecrets(str_repeat('x', 32));
-    $c = $v->seal('sensitive');
-    same('sensitive', $v->open($c));
-    truth(strpos($c, 'sensitive') === false);
-    $bytes = base64_decode(substr($c, 3));
-    $bytes[40] = chr(ord($bytes[40]) ^ 1);
-    fails('invalid_ciphertext', function () use ($v, $bytes) {
-        $v->open('v1:' . base64_encode($bytes));
-    });
-    fails('invalid_ciphertext', function () use ($c) {
-        (new EncryptedSecrets(str_repeat('y', 32)))->open($c);
-    });
-});
 test('Signature verifies exact bytes and every repeated v1 digest', function () {
     $clock = new TestClock();
     $raw = '{ "id": "evt_test" }';
@@ -66,12 +51,12 @@ test('Signature verifies exact bytes and every repeated v1 digest', function () 
         $v->verify(str_replace(' ', '', $raw), array('X-Bachs-Signature-V2' => 't=' . $t . ',v1=' . $sig), array('correct'));
     });
 });
-test('Invalid V2 cannot downgrade to valid legacy headers', function () {
+test('Invalid V2 cannot downgrade to obsolete headers', function () {
     $c = new TestClock();
     $t = $c->now();
     $raw = '{}';
     fails('invalid_signature', function () use ($c, $t, $raw) {
-        (new SignatureVerifier($c))->verify($raw, array('x-bachs-signature-v2' => 't=' . $t . ',v1=' . str_repeat('0', 64), 'x-bachs-timestamp' => (string)$t, 'x-bachs-signature' => hash_hmac('sha256', $t . '.' . $raw, 'correct')), array('correct'), true);
+        (new SignatureVerifier($c))->verify($raw, array('x-bachs-signature-v2' => 't=' . $t . ',v1=' . str_repeat('0', 64), 'x-bachs-timestamp' => (string)$t, 'x-bachs-signature' => hash_hmac('sha256', $t . '.' . $raw, 'correct')), array('correct'));
     });
 });
 foreach (array(-301,301) as $drift) {
@@ -90,14 +75,13 @@ foreach (array('t=1,t=1,v1=abc','t=1,v1=abc','t=NaN,v1=abc','v1=abc',str_repeat(
         });
     });
 }
-test('Legacy signatures require explicit compatibility setting', function () {
+test('Obsolete signature headers are always rejected', function () {
     $c = new TestClock();
     $t = (string)$c->now();
     $h = array('x-bachs-timestamp' => $t,'x-bachs-signature' => hash_hmac('sha256', $t . '.{}', 's'));
     fails('invalid_signature', function () use ($c, $h) {
         (new SignatureVerifier($c))->verify('{}', $h, array('s'));
     });
-    same('legacy', (new SignatureVerifier($c))->verify('{}', $h, array('s'), true)['scheme']);
 });
 foreach (array('http://checkout.bachs.io/c/a','https://checkout.bachs.io.evil.invalid/c/a','https://evil.bachs.io/c/a','https://user@checkout.bachs.io/c/a','https://checkout.bachs.io:443/c/a','https://checkout.bachs.io/c/a#b','https://checkout.bachs.io\\@evil.invalid/c') as $url) {
     test('Reject unsafe provider URL ' . $url, function () use ($url) {

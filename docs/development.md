@@ -4,15 +4,24 @@
 
 | Folder | Purpose |
 |---|---|
-| `modules/gateways/` | Hosted and optional card gateways, callback, client endpoints, CLI worker |
-| `modules/addons/bachs_admin/` | Activation and staff/client pages |
-| `includes/hooks/` | WHMCS cron and client cleanup hooks |
-| `src/Application/` | Checkout, verification, refunds, saved cards, and jobs |
-| `src/Domain/` | Exact money, IDs, and small adapter interfaces |
-| `src/Infrastructure/` | Bachs HTTP/signatures, WHMCS adapters, storage, and encryption |
-| `src/Http/` | Request checks, pages, and safe messages |
-| `resources/` | CSS, JavaScript, and the client template |
-| `tests/` and `build/` | Local checks and installation packaging |
+| `modules/gateways/bachs.php` | Hosted gateway entry, metadata and native configuration fields |
+| `modules/gateways/bachs_card.php` | Optional native saved-card gateway |
+| `modules/gateways/callback/bachs.php` | Signed Bachs webhook receiver |
+| `modules/gateways/bachs/lib/src/` | Application, domain, HTTP and provider/native/storage adapters |
+| `modules/gateways/bachs/assets/` | Checkout and admin behavior scripts; no custom CSS |
+| `modules/gateways/bachs/bin/` | Private optional CLI worker |
+| `includes/hooks/bachs.php` | Native settings-page output, client-page output, cron and cleanup |
+| `tests/` and `build/` | Local checks and release packaging |
+
+## WHMCS integration
+
+The entry files declare functions without loading the application. `_config()` returns only native field definitions; it makes no database or provider calls. This lets WHMCS discover and activate the gateway before the runtime, keys or tables exist. Both gateways include `whmcs.json` metadata for Apps & Integrations.
+
+Runtime loads `getGatewayVariables('bachs')` from WHMCS and synchronizes the saved native fields through GatewayConfiguration. Configuration hashes prevent repeated provider checks. Failed checks disable new collections and retry at a bounded interval. There is no addon configuration source, import handler or role list. Schema::ensure installs the module tables once when needed; ordinary runtime requests only check the schema version.
+
+AdminAreaFooterOutput places ordinary native controls beneath Payment Gateways. Its form actions use `bachs_action` so they cannot be mistaken for WHMCS's own Save Changes request. WHMCS renders every configuration field, including password and yes/no fields. Staff permissions and CSRF are checked before protected actions.
+
+ClientAreaFooterOutput adds payment status and card consent controls to the existing invoice and Pay Methods pages. Provider returns redirect into those pages. Remote-input review follows the native iframe POST and then uses WHMCS's Pay Methods page for explicit consent. No standalone branded shell or theme template changes are required.
 
 ## Payment flow
 
@@ -52,20 +61,22 @@ PaymentOptions holds the documented 11 fiat pricing currencies, 13 method corrid
 
 CardInput binds native invoice/setup forms to the signed-in actor and merchant scope with a short-lived, single-use confirmation and CSRF. It stores no card fields and performs no provider writes during rendering. WHMCS auto-posts the initial form into its iframe to display consent; only the client's second POST consumes the intent and opens hosted checkout. New-card invoice checkout uses the fresh invoice snapshot; add-only setup never reads an invoice. Remote updates explicitly explain how to replace a card. TokenAdapter serializes native enrollment, treats `createCardPayMethod` as a boolean helper, and retrieves the actual ID through client-scoped `GetPayMethods`, matching the gateway and local opaque token. An interrupted creation is reconciled before any retry. When automatic billing is enabled later, the worker also enrolls earlier active, consented cards from the current merchant scope without charging them.
 
-The native `_refund` functions are omitted: WHMCS has no pending refund result in that contract. Requests instead start in the addon, where asynchronous provider state and subsequent native Record Only accounting remain explicit.
+The native `_refund` functions are omitted: WHMCS has no pending refund result in that contract. Requests instead start in the Payment Gateways activity panel, where asynchronous provider state and subsequent native Record Only accounting remain explicit.
 
-WHMCS references: [gateway installation](https://developers.whmcs.com/payment-gateways/installation-activation), [callbacks](https://developers.whmcs.com/payment-gateways/callbacks), [refunds](https://developers.whmcs.com/payment-gateways/refunds), and [remote input](https://developers.whmcs.com/payment-gateways/remote-input-gateway).
+WHMCS references: [native configuration fields](https://developers.whmcs.com/payment-gateways/configuration), [module metadata](https://developers.whmcs.com/advanced/json-file), [output hooks](https://developers.whmcs.com/hooks-reference/output), [gateway installation](https://developers.whmcs.com/payment-gateways/installation-activation), [callbacks](https://developers.whmcs.com/payment-gateways/callbacks), [refunds](https://developers.whmcs.com/payment-gateways/refunds), and [remote input](https://developers.whmcs.com/payment-gateways/remote-input-gateway).
 
 ## Test status
 
-The latest local run has 171 passing PHP tests with 475 assertions and 6 passing client behavior tests. It uses fake provider/native adapters, PHP 8.4.2, and SQLite. An eight-process test checks duplicate posting. JavaScript uses a small simulated DOM.
+The latest local run has 190 passing PHP tests with 638 assertions and 6 passing client behavior tests. It uses fake provider/native adapters, PHP 8.4.2, and SQLite. An eight-process test checks duplicate posting. JavaScript uses a small simulated DOM.
 
-Real Bachs sandbox transactions, licensed WHMCS, MySQL/MariaDB, older PHP executables, and rendered themes remain unverified. A PHP 5.6 token check is not a real legacy runtime test. Targets are WHMCS 7.0–9.1 with native card enrollment from 7.9; always use the PHP/ionCube/database versions supported by WHMCS.
+Requires WHMCS 8.0 or later. Runtime PHP targets 7.2 syntax so the early WHMCS 8 releases can run it; use the PHP and ionCube versions required by your actual WHMCS release. WHMCS 7, pre-8 client authentication, old API administrator configuration and obsolete webhook signature headers are unsupported.
+
+Real Bachs sandbox transactions, licensed WHMCS, MySQL/MariaDB and rendered themes remain unverified. Local tests use a modern PHP executable and do not establish compatibility with every supported PHP/WHMCS combination.
 
 Before claiming production support, test each advertised version/theme and payment method, native posting/provisioning once, consent and capture retries, refunds/Record Only linkage, callbacks plus cron, interrupted workers, migrations, upgrades, and real browser behavior. Keep customer evidence and resource IDs private.
 
 ## Packaging
 
-`make package` runs local checks, assembles `dist/whmcs-root/`, and creates one ZIP plus checksums. Shared PHP is placed under the private gateway library. File/class hashes detect mixed uploads. Tests, development tools, logs, and local backups do not ship.
+`make package` runs local checks, assembles `dist/whmcs-root/`, and creates one ZIP plus checksums. Runtime PHP already lives under the private gateway library, so the source module can be uploaded directly. The package adds release documentation and an integrity manifest. File/class hashes detect mixed uploads. Tests, development tools, logs, and local backups do not ship.
 
 Build published packages from a clean committed checkout. The manifest records the commit and source fingerprint; an uncommitted source tree must not be labeled as an exact committed release. Local outputs remain in ignored folders.

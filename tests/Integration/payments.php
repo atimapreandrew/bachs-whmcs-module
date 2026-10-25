@@ -281,7 +281,7 @@ test('Admin handler checks per-action authority and native CSRF before mutating'
     });
     $a->bridge->identity->validCsrf = false;
     fails('csrf_required', function () use ($a) {
-        (new \Bachs\Whmcs\Http\AdminActions($a))->run(array('action' => 'settings'));
+        (new \Bachs\Whmcs\Http\AdminActions($a))->run(array('action' => 'verify'));
     });
 });
 test('Confirmations bind actor, scope, action and expiry; consumption is single use', function () {

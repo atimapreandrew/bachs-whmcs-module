@@ -37,7 +37,7 @@ function nativeCardFixture($app)
     $GLOBALS['bachs_native_card_test_api'] = $api;
     $method = $app->store->insert('payment_methods', $app->settings->activeScope()['id'], 'synthetic-native-method',
         array('last4' => '4242', 'brand' => 'Visa', 'expiry_month' => 12, 'expiry_year' => 2034), 'active', array('client_id' => 1));
-    return array($api, $method, new TokenAdapter($app->settings, '9.1.0', $api));
+    return array($api, $method, new TokenAdapter($app->settings, $api));
 }
 
 test('Native boolean enrollment maps the Pay Method ID through client-scoped GetPayMethods', function () {

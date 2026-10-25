@@ -2,12 +2,13 @@
 
 ## 1.0.0
 
-- Hosted checkout, signed webhooks, duplicate protection, and recoverable background payment checks.
-- Refund tracking with native Record Only accounting, optional saved cards, and WHMCS-owned renewal billing.
-- Normal addon setup with explicit sandbox confirmation; no private acceptance JSON file or weekly connection expiry.
-- Native WHMCS staff permissions and manual dashboard webhook setup.
-- All 11 invoice currencies and all 13 checkout corridors, with admin controls.
-- Crypto collection with exact decimal checks and verified allocation to the original invoice currency.
-- Invoice-aware native card input, setup-only returns, and native Pay Method mapping using the documented boolean helper contract.
-- Refund initiation in the addon, followed by Record Only after provider success.
-- One installation ZIP, MIT licensing, author credit, and concise installation/developer guides.
+- WHMCS 8.0 and later only; removed older-version paths and obsolete signature support.
+- Standard Bachs payment gateway with optional native saved-card billing.
+- Native Payment Gateways configuration for keys, environments, currencies and methods.
+- Directly installable source folders, lazy gateway discovery and Apps & Integrations metadata.
+- Native WHMCS page controls without an addon or custom stylesheet.
+- Hosted/overlay checkout, signed webhooks and recoverable payment recognition.
+- All 11 invoice currencies, 13 method corridors and USD checkout conversion.
+- Consent-based saved cards, native Pay Method mapping and WHMCS renewal billing.
+- Asynchronous refund tools on the Payment Gateways page, with Record Only accounting.
+- One installation ZIP, MIT licensing and author credit.

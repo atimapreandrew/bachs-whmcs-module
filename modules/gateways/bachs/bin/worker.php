@@ -14,7 +14,7 @@ try {
         $worker->cleanup();
     }
     echo json_encode($worker->run(isset($options['limit']) ? (int)$options['limit'] : null, isset($options['seconds']) ? (int)$options['seconds'] : null)) . PHP_EOL;
-} catch (Exception $e) {
+} catch (Throwable $e) {
     fwrite(STDERR, 'Bachs worker failed: ' . ($e instanceof \Bachs\Whmcs\Domain\Failure ? $e->reason : 'internal_error') . PHP_EOL);
     exit(1);
 }

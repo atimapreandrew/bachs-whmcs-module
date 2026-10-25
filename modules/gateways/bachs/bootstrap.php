@@ -4,8 +4,12 @@ if (!defined('WHMCS')) {
     http_response_code(403);
     exit('Access denied');
 }
-if (version_compare(PHP_VERSION, '5.6.0', '<')) {
-    throw new RuntimeException('Bachs requires PHP 5.6 or later.');
+if (version_compare(PHP_VERSION, '7.2.0', '<')) {
+    throw new RuntimeException('Bachs requires PHP 7.2 or later on a supported WHMCS release.');
+}
+$bachsWhmcsVersion = defined('WHMCS_VERSION') ? WHMCS_VERSION : (isset($GLOBALS['CONFIG']['Version']) ? $GLOBALS['CONFIG']['Version'] : null);
+if ($bachsWhmcsVersion !== null && version_compare($bachsWhmcsVersion, '8.0', '<')) {
+    throw new RuntimeException('Bachs requires WHMCS 8.0 or later.');
 }
 $bachsManifestPath = __DIR__ . '/lib/release.json';
 if (is_file($bachsManifestPath)) {
@@ -24,7 +28,8 @@ $bachsPrivateLoader = __DIR__ . '/lib/autoload.php';
 if (is_file($bachsPrivateLoader)) {
     require_once $bachsPrivateLoader;
 } else {
-    require_once dirname(dirname(dirname(__DIR__))) . '/autoload.php';
+    throw new RuntimeException('Bachs runtime library is missing. Upload the complete modules and includes folders.');
 }
 unset($bachsPrivateLoader);
 unset($bachsManifestPath, $bachsManifest, $bachsRoot, $bachsComponent, $bachsHash);
+unset($bachsWhmcsVersion);

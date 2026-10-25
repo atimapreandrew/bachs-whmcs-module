@@ -8,7 +8,7 @@ The module checks HTTPS certificates, fixed API hosts, signed webhook bytes/time
 
 Raw card/OTP entry stays at Bachs. Saved methods require client consent and ownership checks. Card saving and automatic collection start disabled. Sandbox payments require explicit confirmation that the installation is a test site.
 
-API/signing keys, provider card tokens, saved requests, and resumable checkout URLs are encrypted. Portal URLs are never stored. Staff access follows WHMCS addon access and native permissions. Record views and diagnostic exports hide sensitive fields.
+API/signing keys, provider card tokens, saved requests, and resumable checkout URLs are encrypted. Portal URLs are never stored. Staff access follows native WHMCS permissions. Configuration is stored in native gateway fields. Record views and diagnostic exports hide sensitive fields.
 
 ## Stored data
 
@@ -18,7 +18,7 @@ Cleanup removes expired confirmations/rate counters and old terminal checkout li
 
 ## Server care
 
-Protect the private library, CLI folder, logs, and optional encryption key. Keep web and cron configuration consistent, back up keys, and patch WHMCS/PHP/OpenSSL/cURL. Do not disable signatures or certificate checks to fix an integration error. Hosted card entry does not establish PCI compliance by itself.
+Protect the private library, CLI folder, logs and WHMCS encryption configuration. Keep web and cron configuration consistent, back up keys, and patch WHMCS/PHP/OpenSSL/cURL. Do not disable signatures or certificate checks to fix an integration error. Hosted card entry does not establish PCI compliance by itself.
 
 This release has local tests but no independent security audit or verified live WHMCS/Bachs acceptance. Test on a separate site before production use.
 

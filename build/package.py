@@ -17,29 +17,6 @@ def assemble():
     for folder in ('modules','includes'): shutil.copytree(ROOT / folder, target / folder, dirs_exist_ok=True)
     base = target / 'modules/gateways/bachs'
     library = base / 'lib'
-    shutil.copytree(ROOT / 'src', library / 'src')
-    shutil.copytree(ROOT / 'resources/assets', base / 'assets')
-    shutil.copytree(ROOT / 'resources/templates', target / 'modules/addons/bachs_admin/templates', dirs_exist_ok=True)
-    (library / 'autoload.php').write_text("""<?php
-if (!defined('WHMCS')) { http_response_code(403); exit('Access denied'); }
-spl_autoload_register(function ($class) {
-    $prefix = 'Bachs\\\\Whmcs\\\\';
-    if (strncmp($class, $prefix, strlen($prefix)) === 0) {
-        $relative = str_replace('\\\\', '/', substr($class, strlen($prefix))) . '.php';
-        $file = __DIR__ . '/src/' . $relative;
-        if (is_file($file)) {
-            static $manifest;
-            if (!$manifest) { $manifest = json_decode(file_get_contents(__DIR__ . '/release.json'), true); }
-            if (!isset($manifest['classes'][$relative]) || !hash_equals($manifest['classes'][$relative], hash_file('sha256', $file))) { throw new RuntimeException('Bachs component integrity mismatch'); }
-            require_once $file;
-        }
-    }
-});
-""")
-    deny='<IfModule mod_authz_core.c>\nRequire all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\nOrder allow,deny\nDeny from all\n</IfModule>\n'
-    (library / '.htaccess').write_text(deny)
-    (base / 'bin/.htaccess').write_text(deny)
-    for folder in ('lib','bin'): (base / folder / 'index.php').write_text("<?php\nhttp_response_code(403); exit('Access denied');\n")
     for name in ('README.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','LICENSE.txt'):
         shutil.copy2(ROOT / name, base / name)
     (base / 'docs').mkdir()
@@ -49,7 +26,7 @@ spl_autoload_register(function ($class) {
     manifest = dict(
         version=VERSION,
         source_commit=source_commit(), source_tree_sha256=source_digest(),
-        runtime_syntax_floor='PHP 5.6', target_whmcs='7.0–9.1',
+        runtime_syntax_floor='PHP 7.2', minimum_whmcs='8.0.0', target_whmcs='8.0+',
         components=components,
         classes={str(path.relative_to(library / 'src')): digest(path) for path in files(library / 'src')})
     (library / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -69,7 +46,7 @@ def source_commit():
 
 def source_digest():
     h=hashlib.sha256()
-    for name in ('src','modules','includes','resources'):
+    for name in ('modules','includes'):
         for p in files(ROOT/name):h.update(str(p.relative_to(ROOT)).encode());h.update(p.read_bytes())
     return h.hexdigest()
 def main():
