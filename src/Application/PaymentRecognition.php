@@ -129,11 +129,20 @@ class PaymentRecognition
             return $this->hold($attempt, 'payment_' . (preg_match('/^[a-z_]{1,40}$/D', $payment['status']) ? $payment['status'] : 'unknown'), $receipt);
         }
         try {
-            $precision = $a->settings->precision($d['currency']);
+            $precision = $a->settings->invoicePrecision($d['currency']);
             if (!isset($payment['currency'], $payment['amount'], $payment['amount_paid'])) {
                 return $this->hold($attempt, 'collection_currency_mismatch', $receipt);
             }
             $converted = $payment['currency'] !== $d['currency'];
+            if (isset($d['allowed_methods'])) {
+                $corridor = isset($payment['payment_method']) ? $payment['payment_method'] : '';
+                if ($corridor === 'CARD') {
+                    $corridor = $payment['currency'] . '_CARD';
+                }
+                if (!in_array($corridor, $d['allowed_methods'], true)) {
+                    return $this->hold($attempt, 'collection_method_mismatch', $receipt);
+                }
+            }
             $collectionPrecision = $precision;
             if ($converted) {
                 if (!$checkout || $d['currency'] !== 'USD' || !isset($d['allocation_policy']) || $d['allocation_policy'] !== 'verified_checkout_base_v1') {

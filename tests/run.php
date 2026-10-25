@@ -1,5 +1,7 @@
 <?php
 
+// Keep HTTP controller headers valid while collecting console test output.
+ob_start();
 require __DIR__ . '/bootstrap.php';
 $passed = 0;
 $failed = 0;

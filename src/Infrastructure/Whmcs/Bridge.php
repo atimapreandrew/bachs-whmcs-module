@@ -155,9 +155,12 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
         if (version_compare($this->version, '7.9', '<') || !$this->settings->get('automatic_payments', false) || !$this->settings->get('saved_methods', false)) {
             return;
         }
+        if ($method['scope'] !== $this->settings->activeScope()['id']) {
+            return;
+        }
         require_once $this->root . '/includes/gatewayfunctions.php';
         require_once $this->root . '/includes/invoicefunctions.php';
-        (new TokenAdapter($this->settings, $this->version))->enroll($method);
+        (new TokenAdapter($this->settings, $this->version, $this->api))->enroll($method);
     }
 
     public function finalizeRefund($refund, $payment)

@@ -128,6 +128,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
             throw new Failure('saving_not_enabled');
         }
         $a->settings->assertEnvironment($scope['data']['environment']);
+        $a->settings->cardMethods('USD');
         $lock = 'card_setup:' . $scope['id'] . ':' . (int)$clientId;
         $lease = $a->store->acquire($lock);
         try {
@@ -142,12 +143,15 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
             }
             $customerId = $a->customers->resolve($scope, $a->bridge->customer($clientId), $a->provider($scope));
             $reference = 'wsetup_' . Ids::random();
+            $state = Ids::random();
             $attempt = $a->store->insert('attempts', $scope['id'], $reference, array('reference' => $reference, 'purpose' => 'setup', 'customer_id' => $customerId,
-                'amount' => '0.00', 'currency' => 'USD', 'gateway' => 'bachs_card', 'save' => true, 'expires_at' => $a->store->clock->now() + 3600), 'creating', array('client_id' => (int)$clientId));
+                'amount' => '0.00', 'currency' => 'USD', 'gateway' => 'bachs_card', 'save' => true,
+                'state_hash' => hash('sha256', $state), 'return_state' => $a->settings->secrets->seal($state),
+                'expires_at' => $a->store->clock->now() + 3600), 'creating', array('client_id' => (int)$clientId));
             $consent = $a->store->insert('consents', $scope['id'], $attempt['id'], array('actor' => $actor, 'attempt_id' => $attempt['id'],
                 'customer_id' => $customerId, 'version' => '1', 'text' => Checkout::consentText(), 'purpose' => 'whmcs_invoice_renewals', 'billing_authority' => 'whmcs'), 'active', array('client_id' => (int)$clientId));
             $a->store->update('attempts', $attempt['id'], array('consent_id' => $consent['id']));
-            $return = $a->bridge->systemUrl() . '/index.php?m=bachs_admin';
+            $return = $a->bridge->systemUrl() . '/modules/gateways/bachs/return.php/' . $attempt['id'] . '/' . $state;
             $op = $a->operations->prepare(
                 $scope,
                 'setup:' . $attempt['id'],
@@ -156,7 +160,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
                 array('customer' => array('customer_id' => $customerId), 'save_payment_method' => true, 'payment_method_types' => array('USD_CARD'),
                 'reference' => $reference,
                 'success_url' => $return,
-                'cancel_url' => $return,
+                'cancel_url' => $return . '?cancel=1',
                 'metadata' => array('integration' => 'whmcs',
                 'attempt_id' => $attempt['id']))
             );
@@ -179,6 +183,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
         try {
             $invoice = $a->bridge->invoice($invoiceId);
             $a->ready($scope, $invoice, true);
+            $a->settings->cardMethods($invoice['currency']);
             if ($invoice['gateway'] !== 'bachs_card' || !$a->settings->get('saved_methods', false)) {
                 throw new Failure('capture_not_enabled');
             }

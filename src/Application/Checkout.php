@@ -32,6 +32,13 @@ class Checkout
                 throw new Failure('invoice_gateway_changed');
             }
             $a->ready($scope, $invoice);
+            if ($gateway === 'bachs_card') {
+                $a->assertCardBilling();
+                if (!$save) {
+                    throw new Failure('automatic_payment_consent_required');
+                }
+            }
+            $methods = $a->settings->checkoutMethods($invoice['currency'], $save);
             $snapshot = $a->snapshot($invoice);
             foreach ($a->store->unfinishedAttempts($invoiceId) as $attempt) {
                 if (!in_array($attempt['state'], array('failed', 'expired_verified', 'posted', 'cancelled_verified'), true)) {
@@ -56,7 +63,7 @@ class Checkout
             $amount = Money::positive($invoice['balance'], $a->settings->precision($invoice['currency']));
             $minutes = max(1, min(1440, (int)$a->settings->get('expiry_minutes', 60)));
             $allocationPolicy = 'same_currency';
-            if ($a->settings->get('adaptive_allocation', false) && $invoice['currency'] === 'USD') {
+            if (!$save && $invoice['currency'] === 'USD' && $a->settings->get('adaptive_allocation', true)) {
                 $allocationPolicy = 'verified_checkout_base_v1';
             }
             $attempt = $a->store->insert(
@@ -66,7 +73,7 @@ class Checkout
                 array('reference' => 'whmcs_' . $local,
                 'invoice' => $invoice, 'snapshot' => $snapshot, 'amount' => $amount, 'currency' => $invoice['currency'],
                 'purpose' => 'invoice', 'gateway' => $gateway, 'customer_id' => $customerId, 'save' => (bool)$save,
-                'allocation_policy' => $allocationPolicy,
+                'allocation_policy' => $allocationPolicy, 'allowed_methods' => $methods,
                 'state_hash' => hash('sha256', $state), 'return_state' => $a->settings->secrets->seal($state),
                 'expires_at' => $a->store->clock->now() + $minutes * 60, 'accounting_owner' => 'module'),
                 'creating',
@@ -85,10 +92,9 @@ class Checkout
                 'customer' => array('customer_id' => $customerId), 'reference' => $attempt['data']['reference'],
                 'success_url' => $return, 'cancel_url' => $return . '?cancel=1',
                 'metadata' => array('integration' => 'whmcs', 'installation_id' => $scope['data']['installation'], 'attempt_id' => $attempt['id']),
-                'expires_in_minutes' => $minutes);
-            $methods = $a->settings->get('methods', array());
-            if ($methods) {
-                $body['payment_method_types'] = $methods;
+                'expires_in_minutes' => $minutes, 'payment_method_types' => $methods);
+            if ($allocationPolicy === 'same_currency') {
+                $body['billing_currency'] = $invoice['currency'];
             }
             if ($save) {
                 $body['save_payment_method'] = true;

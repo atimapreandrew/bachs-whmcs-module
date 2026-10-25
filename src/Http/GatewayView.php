@@ -15,12 +15,17 @@ class GatewayView
         $token = $app->bridge->identity->token();
         $id = (int)$params['invoiceid'];
         $invoice = $app->bridge->invoice($id);
+        $app->settings->precision($invoice['currency']);
+        $app->settings->checkoutMethods($invoice['currency'], false);
         if ($invoice['status'] === 'Paid' || \Bachs\Whmcs\Domain\Money::compare($invoice['balance'], '0') === 0) {
             return '<p>There is no payment due on this invoice.</p>';
         }
         $label = $app->settings->get('button_label', 'Pay with Bachs');
         $sandbox = $app->settings->get('environment', 'sandbox') === 'sandbox';
         $save = $app->settings->get('saved_methods', false) && in_array($invoice['currency'], array('USD','NGN'), true);
+        if ($save && !in_array($invoice['currency'] . '_CARD', $app->settings->methods(), true)) {
+            $save = false;
+        }
         $s = '<link rel="stylesheet" href="' . SafeData::html($root . '/assets/bachs.css') . '">';
         $s .= '<section class="bachs-payment" data-bachs-payment data-status-url="' . SafeData::html($root . '/status.php') . '" aria-label="Bachs secure checkout">';
         $s .= '<div class="bachs-payment-top"><span class="bachs-wordmark">bachs<span aria-hidden="true">↗</span></span>' . ($sandbox ? '<span class="bachs-badge">Sandbox · test payment</span>' : '<span class="bachs-muted">Secure checkout</span>') . '</div>';

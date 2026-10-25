@@ -30,42 +30,20 @@ function bachs_card_capture($params)
         return array('status' => 'declined', 'declinereason' => \Bachs\Whmcs\Http\Messages::error($reason), 'rawdata' => array('error_code' => $reason));
     }
 }
+// WHMCS remote-input gateways declare that local card fields are not used.
+function bachs_card_nolocalcc()
+{
+}
 function bachs_card_remoteinput($params)
 {
     try {
-        $app = \Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app();
-        $app->assertCardBilling();
-        $app->settings->assertEnvironment($app->settings->activeScope()['data']['environment']);
-        $url = $app->bridge->systemUrl() . '/index.php?m=bachs_admin';
-        // No card fields are ever rendered by this gateway. Hosted setup requires explicit consent.
-        return '<form action="' . \Bachs\Whmcs\Infrastructure\SafeData::html($url) . '" method="get" target="_top"><input type="hidden" name="m" value="bachs_admin"><button type="submit">Manage cards securely with Bachs</button></form>';
+        return \Bachs\Whmcs\Http\CardInput::render(\Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app(), $params);
     } catch (Exception $e) {
         return '<p>Saved-card setup is unavailable. Use Bachs hosted invoice payment.</p>';
     }
 }
 function bachs_card_remoteupdate($params)
 {
-    return bachs_card_remoteinput($params);
-}
-function bachs_card_refund($params)
-{
-    try {
-        $app = \Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app();
-        $actor = $app->bridge->identity->admin('request_refunds');
-        $app->bridge->identity->csrf();
-        $payment = null;
-        foreach ($app->store->listing('payments', array('invoice_id' => (int)$params['invoiceid']), 500) as $row) {
-            if ($row['data']['transaction_id'] === $params['transid'] && $row['data']['gateway'] === 'bachs_card') {
-                $payment = $row;
-                break;
-            }
-        }
-        if (!$payment) {
-            throw new \Bachs\Whmcs\Domain\Failure('original_payment_not_mapped');
-        }
-        $r = (new \Bachs\Whmcs\Application\Refunds($app))->request($payment['id'], $params['amount'], 'Refund requested through WHMCS', $actor['actor']);
-        return array('status' => 'error', 'rawdata' => array('refund_request' => $r['id'], 'message' => 'Refund tracked in Addons > Bachs. Reconcile the existing request; do not resubmit.'));
-    } catch (Exception $e) {
-        return array('status' => 'error', 'rawdata' => array('message' => 'Review this refund in Addons > Bachs.'));
-    }
+    // Bachs does not document editing an existing card token in place.
+    return '<div class="alert alert-info" role="status">To change a Bachs card, add a new payment method, then remove the old one. Existing cards cannot be edited here.</div>';
 }

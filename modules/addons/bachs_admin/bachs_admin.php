@@ -73,11 +73,19 @@ function bachs_admin_clientarea($vars)
             $methods[] = array('id' => $row['id'], 'state' => $row['state'], 'brand' => $row['data']['brand'],
                 'last4' => $row['data']['last4'], 'expiry_month' => $row['data']['expiry_month'], 'expiry_year' => $row['data']['expiry_year']);
         }
+        $canSetup = $app->settings->get('saved_methods', false) && $app->settings->get('enabled', false) && !$app->settings->get('draining', false);
+        if ($canSetup) {
+            try {
+                $app->settings->cardMethods('USD');
+            } catch (Exception $e) {
+                $canSetup = false;
+            }
+        }
         return array('pagetitle' => 'Bachs payment settings', 'breadcrumb' => array('index.php?m=bachs_admin' => 'Bachs payment settings'),
             'templatefile' => 'client', 'requirelogin' => true, 'forcessl' => true,
             'vars' => array('bachsMethods' => $methods, 'bachsToken' => $app->bridge->identity->token(),
                 'bachsRoot' => $app->bridge->systemUrl() . '/modules/gateways/bachs',
-                'bachsCanSetup' => $app->settings->get('saved_methods', false) && $app->settings->get('enabled', false),
+                'bachsCanSetup' => $canSetup,
                 'bachsSandbox' => $app->settings->get('environment', 'sandbox') === 'sandbox', 'bachsConsent' => \Bachs\Whmcs\Application\Checkout::consentText()));
     } catch (Exception $e) {
         return array('pagetitle' => 'Bachs payment settings', 'templatefile' => 'client', 'requirelogin' => true, 'forcessl' => true,

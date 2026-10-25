@@ -63,6 +63,17 @@ class Worker
                 $a->store->update($table, $row['id'], array(), null, array('next_run' => $now + 300));
             }
         }
+        if ($a->settings->get('automatic_payments', false) && $a->settings->get('saved_methods', false) && version_compare($a->bridge->version, '7.9', '>=')) {
+            $scope = $a->settings->activeScope();
+            $rows = $a->store->run("SELECT id,data FROM mod_bachs_payment_methods WHERE scope=? AND state='active' AND next_run<=? ORDER BY next_run,id LIMIT 20", array($scope['id'], $now))->fetchAll(\PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                $data = json_decode($row['data'], true);
+                if (empty($data['pay_method_id']) || !isset($data['native_enrollment']) || $data['native_enrollment'] !== 'completed') {
+                    $a->job('enroll', $scope['id'], $row['id']);
+                }
+                $a->store->update('payment_methods', $row['id'], array(), null, array('next_run' => $now + 300));
+            }
+        }
         foreach ($a->store->listing('merchant_scopes', array(), 100) as $scope) {
             $last = $a->settings->get('sweep_at_' . $scope['id'], 0);
             if ($now - $last > 300) {
@@ -103,6 +114,18 @@ class Worker
         }
         if ($type === 'refund') {
             return (new Refunds($a))->reconcile($id) === 'pending';
+        }
+        if ($type === 'enroll') {
+            if (!$a->settings->get('automatic_payments', false) || !$a->settings->get('saved_methods', false) || $a->settings->activeScope()['id'] !== $job['scope']) {
+                return false;
+            }
+            $method = $a->store->get('payment_methods', $id);
+            if (!$method || $method['state'] !== 'active') {
+                return false;
+            }
+            (new SavedMethods($a))->owned($id, $job['scope'], $method['client_id']);
+            $a->bridge->enrollMethod($method);
+            return false;
         }
         if ($type === 'sweep') {
             $this->sweep($a->settings->scope($job['scope']));

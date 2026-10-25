@@ -53,6 +53,7 @@ class FakeWhmcs implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domai
     public $transactions = array();
     public $posts = 0;
     public $crashAfterPost = false;
+    public $enrolled = array();
     public $identity;
     public $version = '9.1.0';
     public function __construct()
@@ -106,6 +107,7 @@ class FakeWhmcs implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domai
     }
     public function enrollMethod($method)
     {
+        $this->enrolled[] = $method['id'];
     }
     public function finalizeRefund($refund, $payment)
     {
@@ -141,7 +143,7 @@ class FakeProvider implements \Bachs\Whmcs\Domain\ProviderClient
             return array('customer_id' => $this->customerId);
         }
         if ($method === 'POST' && $path === '/v1/checkout-sessions') {
-            if ($this->app && !$this->app->store->find('operations', $this->app->settings->activeScope()['id'], 'checkout:' . $body['metadata']['attempt_id'])) {
+            if ($this->app && !$this->app->store->find('operations', $this->app->settings->activeScope()['id'], 'checkout:' . $body['metadata']['attempt_id']) && !$this->app->store->find('operations', $this->app->settings->activeScope()['id'], 'setup:' . $body['metadata']['attempt_id'])) {
                 throw new Failure('test_missing_persist_before_send');
             }
             $id = 'chk_' . substr(hash('sha256', $idempotencyKey), 0, 16);
@@ -159,7 +161,7 @@ class FakeProvider implements \Bachs\Whmcs\Domain\ProviderClient
         if ($method === 'POST' && $path === '/v1/charges') {
             $id = 'pay_' . substr(hash('sha256', $idempotencyKey), 0, 16);
             return $this->payments[$id] = array('payment_id' => $id, 'status' => $this->chargeState, 'reference' => $body['reference'], 'amount' => $body['amount'],
-                'currency' => $body['currency'], 'amount_paid' => $this->chargeState === 'succeeded' ? $body['amount'] : '0.00', 'billing_reason' => 'purchase', 'payment_method' => 'USD_CARD');
+                'currency' => $body['currency'], 'amount_paid' => $this->chargeState === 'succeeded' ? $body['amount'] : '0.00', 'billing_reason' => 'purchase', 'payment_method' => 'CARD');
         }
         if ($method === 'GET' && strpos($path, '/v1/payments/') === 0) {
             $id = substr($path, strlen('/v1/payments/'));
@@ -202,7 +204,7 @@ class FakeProvider implements \Bachs\Whmcs\Domain\ProviderClient
         $this->checkouts[$d['checkout_id']]['charge'] = array('payment_id' => $id);
         $this->payments[$id] = array('payment_id' => $id, 'status' => 'succeeded', 'billing_reason' => 'purchase', 'checkout_id' => $d['checkout_id'],
             'reference' => $d['reference'], 'amount' => $d['amount'], 'amount_paid' => $d['amount'], 'currency' => $d['currency'],
-            'is_refundable' => true, 'payment_method' => 'USD_CARD', 'customer' => array('id' => $d['customer_id']), 'fees' => array('amount' => '2.00','currency' => $d['currency']), 'fee_paid_by' => 'merchant');
+            'is_refundable' => true, 'payment_method' => 'CARD', 'customer' => array('id' => $d['customer_id']), 'fees' => array('amount' => '2.00','currency' => $d['currency']), 'fee_paid_by' => 'merchant');
         return $id;
     }
     public function writes($path)
@@ -228,6 +230,7 @@ function environment($database = 'sqlite::memory:')
     $settings->set('environment', 'sandbox');
     $settings->set('enabled', true);
     $settings->set('test_installation', true);
+    $settings->set('adaptive_allocation', false);
     $settings->set('collection_precision', array('USDT_TRC20' => 6));
     $settings->saveSecret('signing_' . $scope['id'], 'synthetic_signing_secret_for_tests');
     $app = new Engine($store, $settings, $bridge, function ($s) use ($provider) {

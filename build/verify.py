@@ -37,6 +37,7 @@ def main():
     required = (
         'modules/gateways/bachs.php',
         'modules/gateways/bachs_card.php',
+        'modules/gateways/bachs/card.php',
         'modules/gateways/callback/bachs.php',
         'modules/addons/bachs_admin/bachs_admin.php',
         'modules/addons/bachs_admin/templates/client.tpl',

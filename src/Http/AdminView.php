@@ -76,7 +76,7 @@ class AdminView
             }
             $s .= '<a href="' . $this->h($this->link . '&page=' . $key) . '"' . ($key === $page ? ' aria-current="page"' : '') . '>' . $this->h($label) . '</a>';
         }
-        $s .= '<div class="bachs-nav-foot">Independent integration<br>Version 1.0.0 · RC</div></nav><main class="bachs-main"><div class="bachs-page-heading"><div><p class="bachs-eyebrow">Payment operations</p><h1>' . $this->h(self::$pages[$page]) . '</h1></div><span class="bachs-muted">' . ($this->scope ? $this->h($this->scope['data']['name']) : 'Connect your merchant account') . '</span></div>';
+        $s .= '<div class="bachs-nav-foot">Independent integration<br>Version 1.0.0</div></nav><main class="bachs-main"><div class="bachs-page-heading"><div><p class="bachs-eyebrow">Payment operations</p><h1>' . $this->h(self::$pages[$page]) . '</h1></div><span class="bachs-muted">' . ($this->scope ? $this->h($this->scope['data']['name']) : 'Connect your merchant account') . '</span></div>';
         if ($this->app->settings->get('environment', 'sandbox') === 'sandbox') {
             $s .= '<div class="bachs-notice">Sandbox environment. Use this only on a separate WHMCS test installation.</div>';
         }
@@ -171,24 +171,21 @@ class AdminView
         $fields .= '<p class="bachs-muted">Automatic card payments also need the bachs_card gateway, WHMCS 7.9 or later, and client consent. Test this flow before enabling it.</p>';
         $fields .= $this->check('enabled', 'Enable new payments', $a->settings->get('enabled', false));
         $fields .= $this->check('draining', 'Maintenance: finish pending payments and stop new payments', $a->settings->get('draining', false));
-        $fields .= '<details><summary>Advanced payment settings</summary><fieldset><legend>Allowed invoice currencies</legend><div class="bachs-choice-grid">';
-        foreach (array('USD', 'NGN', 'GHS', 'KES', 'MWK', 'TZS', 'UGX', 'ZMW') as $currency) {
-            $fields .= $this->check('currencies[]', $currency, in_array($currency, $a->settings->get('currencies', array('USD', 'NGN')), true), $currency);
+        $fields .= '<input type="hidden" name="currencies_present" value="1"><fieldset><legend>Invoice currencies</legend><p>Enable the currencies you accept. Add the same currency codes in WHMCS currency settings.</p><div class="bachs-choice-grid">';
+        foreach (\Bachs\Whmcs\Application\PaymentOptions::currencies() as $currency => $name) {
+            $fields .= $this->check('currencies[]', $currency . ' — ' . $name, in_array($currency, $a->settings->get('currencies', array_keys(\Bachs\Whmcs\Application\PaymentOptions::currencies())), true), $currency);
         }
-        $fields .= '</div></fieldset><fieldset><legend>Limit checkout methods</legend><p>Leave all clear to let Bachs show the methods available to your account.</p><div class="bachs-choice-grid">';
-        $methods = array('USD_CARD' => 'USD cards', 'NGN_CARD' => 'NGN cards', 'NGN_BANK_TRANSFER' => 'NGN bank transfer',
-            'MOMO_GHS' => 'Ghana mobile money', 'MOMO_KES' => 'Kenya mobile money', 'MOMO_TZS' => 'Tanzania mobile money',
-            'MOMO_UGX' => 'Uganda mobile money', 'MOMO_XAF' => 'XAF mobile money', 'MOMO_XOF' => 'XOF mobile money',
-            'MOMO_RWF' => 'Rwanda mobile money', 'MOMO_MWK' => 'Malawi mobile money', 'MOMO_ZMW' => 'Zambia mobile money', 'CRYPTO' => 'Crypto');
-        foreach ($methods as $value => $label) {
-            $fields .= $this->check('methods[]', $label, in_array($value, $a->settings->get('methods', array()), true), $value);
+        $selected = $a->settings->get('methods', array());
+        $fields .= '</div></fieldset><fieldset><legend>Payment methods</legend>';
+        $fields .= $this->select('methods_mode', 'Offer', array('all' => 'All available Bachs methods', 'selected' => 'Only the methods selected below'), $a->settings->get('methods_mode', $selected ? 'selected' : 'all'));
+        $fields .= '<div class="bachs-choice-grid">';
+        foreach (\Bachs\Whmcs\Application\PaymentOptions::methods() as $value => $label) {
+            $fields .= $this->check('methods[]', $label, in_array($value, $selected ? $selected : array_keys(\Bachs\Whmcs\Application\PaymentOptions::methods()), true), $value);
         }
-        $fields .= '</div></fieldset>' . $this->check('adaptive_allocation', 'Accept verified converted payments for USD invoices', $a->settings->get('adaptive_allocation', false));
-        $precisions = array();
-        foreach ($a->settings->get('collection_precision', array()) as $currency => $digits) {
-            $precisions[] = $currency . '=' . $digits;
-        }
-        $fields .= '<label class="bachs-field"><span>Extra collection currency precision</span><textarea name="collection_precision" rows="3">' . $this->h(implode("\n", $precisions)) . '</textarea><small>For converted assets only. Enter verified CODE=decimal places values, one per line. Unknown currencies stay in review.</small></label>';
+        $fields .= '</div><p>Availability depends on your Bachs account, invoice currency and payment minimums. Card wallets such as Apple Pay and Google Pay appear where Bachs supports them. Crypto covers USDT on Tron, BNB Chain, Ethereum and Solana; USDC on BNB Chain; ETH on Ethereum; SOL on Solana; and BNB on BNB Chain. Select individual crypto assets and networks in your Bachs checkout settings.</p></fieldset>';
+        $fields .= $this->check('adaptive_allocation', 'Let clients pay USD invoices in another supported currency, including crypto', $a->settings->get('adaptive_allocation', true));
+        $fields .= '<p class="bachs-muted">USD invoices keep their USD amount when Bachs converts the payment. Other invoice currencies collect in their own currency. Conversion also needs adaptive pricing enabled in Bachs. Saving a card uses the invoice currency and supports USD or NGN.</p>';
+        $fields .= '<details><summary>Advanced payment settings</summary>';
         $fields .= $this->input('expiry_minutes', 'Checkout expiry in minutes', 'number', $a->settings->get('expiry_minutes', 60));
         $fields .= $this->input('sensitive_retention_days', 'Keep completed checkout links for this many days', 'number', $a->settings->get('sensitive_retention_days', 30)) . '</details>';
         $s .= '<section class="bachs-panel"><h2>Payment settings</h2><p>Save the webhook signing secret and run the worker before enabling payments. <a href="' . $this->h($this->link . '&page=webhooks') . '">Webhook settings</a></p>' . $this->form('settings', array(), $fields, 'Save payment settings') . '</section>';
@@ -217,16 +214,15 @@ class AdminView
     {
         $a = $this->app;
         $s = '<section class="bachs-panel"><h2>Installation diagnostics</h2><dl class="bachs-definition">';
-        $values = array('Plugin' => '1.0.0 release candidate', 'PHP' => PHP_VERSION, 'WHMCS' => $a->bridge->version, 'Worker' => strip_tags($this->workerHealth()),
-            'Encryption' => getenv('BACHS_ENCRYPTION_KEY') ? 'Dedicated authenticated encryption key' : 'WHMCS EncryptPassword / DecryptPassword',
-            'Release status' => 'Release candidate; test in Bachs sandbox before live use');
+        $values = array('Plugin' => '1.0.0', 'PHP' => PHP_VERSION, 'WHMCS' => $a->bridge->version, 'Worker' => strip_tags($this->workerHealth()),
+            'Encryption' => getenv('BACHS_ENCRYPTION_KEY') ? 'Dedicated authenticated encryption key' : 'WHMCS EncryptPassword / DecryptPassword');
         foreach (array('curl','openssl','json','pdo_mysql') as $ext) {
             $values[$ext] = extension_loaded($ext) ? 'Available' : 'Missing';
         }
         foreach ($values as $k => $v) {
             $s .= '<div><dt>' . $this->h($k) . '</dt><dd>' . $this->h($v) . '</dd></div>';
         }
-        $s .= '</dl><p>Production verification requires actual Bachs sandbox payments and licensed WHMCS accounting tests. Local tests alone do not establish compatibility.</p></section>';
+        $s .= '</dl></section>';
         if ($this->can('export_diagnostics')) {
             $s .= '<section class="bachs-panel"><h2>Export diagnostics</h2><p>Financial identities and status only. Keys, tokens, signed URLs, payer details and raw payloads are excluded.</p>' . $this->form('export', array(), '', 'Prepare redacted export') . '</section>';
         }

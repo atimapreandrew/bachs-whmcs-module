@@ -32,7 +32,7 @@
         .then(function (r) { if (!r.ok) throw new Error('status'); return r.json(); })
         .then(function (data) {
           announce(root, data.message);
-          if (data.state === 'posted' || data.invoice_paid) { root.removeAttribute('aria-busy'); return; }
+          if (data.state === 'posted' || data.state === 'setup_completed' || data.invoice_paid) { root.removeAttribute('aria-busy'); return; }
           if (['review','failed','expired_verified','cancelled_verified'].indexOf(data.state) >= 0) { root.removeAttribute('aria-busy'); return; }
           setTimeout(check, Math.min(15000, 1500 * Math.pow(1.5, count)));
         })

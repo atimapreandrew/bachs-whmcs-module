@@ -45,6 +45,11 @@ class ClientController
         if (!$attempt || (int)$attempt['client_id'] !== (int)$actor['client_id']) {
             throw new Failure('invoice_access_denied');
         }
+        if ($attempt['data']['purpose'] === 'setup') {
+            $this->json(array('state' => $attempt['state'], 'message' => Messages::state($attempt['state']), 'invoice_paid' => false,
+                'invoice_url' => $a->bridge->systemUrl() . '/index.php?m=bachs_admin'));
+            return;
+        }
         $invoice = $a->bridge->invoice($attempt['invoice_id']);
         if ((int)$invoice['client_id'] !== (int)$actor['client_id']) {
             throw new Failure('invoice_access_denied');
@@ -78,16 +83,60 @@ class ClientController
         if (isset($_GET['checkout_id']) && (!isset($attempt['data']['checkout_id']) || !is_string($_GET['checkout_id']) || $_GET['checkout_id'] !== $attempt['data']['checkout_id'])) {
             throw new Failure('return_checkout_mismatch');
         }
-        $invoice = $a->bridge->invoice($attempt['invoice_id']);
-        if ((int)$invoice['client_id'] !== (int)$actor['client_id']) {
-            throw new Failure('invoice_access_denied');
+        $setup = $attempt['data']['purpose'] === 'setup';
+        if (!$setup) {
+            $invoice = $a->bridge->invoice($attempt['invoice_id']);
+            if ((int)$invoice['client_id'] !== (int)$actor['client_id']) {
+                throw new Failure('invoice_access_denied');
+            }
         }
         $message = Messages::state($attempt['state']);
         $root = $a->bridge->systemUrl() . '/modules/gateways/bachs';
         $content = '<section class="bachs-payment" data-bachs-return data-attempt="' . SafeData::html($attempt['id']) . '" data-status-url="' . SafeData::html($root . '/status.php') . '">'
-            . '<span class="bachs-eyebrow">Invoice #' . (int)$attempt['invoice_id'] . '</span><h1>Payment status</h1><p role="status" aria-live="polite" data-bachs-status>' . SafeData::html($message) . '</p>'
-            . '<a class="bachs-button" href="' . SafeData::html($a->bridge->systemUrl() . '/viewinvoice.php?id=' . (int)$attempt['invoice_id']) . '">Return to invoice</a></section>';
+            . '<span class="bachs-eyebrow">' . ($setup ? 'Saved card' : 'Invoice #' . (int)$attempt['invoice_id']) . '</span><h1>' . ($setup ? 'Card setup status' : 'Payment status') . '</h1><p role="status" aria-live="polite" data-bachs-status>' . SafeData::html($message) . '</p>'
+            . '<a class="bachs-button" href="' . SafeData::html($a->bridge->systemUrl() . ($setup ? '/index.php?m=bachs_admin' : '/viewinvoice.php?id=' . (int)$attempt['invoice_id'])) . '">' . ($setup ? 'Return to payment settings' : 'Return to invoice') . '</a></section>';
         $this->page('Payment status', $content);
+    }
+
+    public function card()
+    {
+        $a = $this->app;
+        $actor = $a->bridge->identity->client();
+        $a->bridge->identity->csrf();
+        $step = Input::text($_POST, 'step', 'confirm', 16);
+        if (!in_array($step, array('review', 'confirm'), true)) {
+            throw new Failure('unknown_client_action');
+        }
+        if ($step === 'confirm' && empty($_POST['consent'])) {
+            throw new Failure('automatic_payment_consent_required');
+        }
+        $a->assertCardBilling();
+        $scope = $a->settings->activeScope();
+        (new RateLimit($a->store))->check('card:' . $actor['client_id'], 10);
+        $confirmation = Input::text($_POST, 'confirmation', '', 48);
+        $confirmations = new \Bachs\Whmcs\Application\Confirmations($a);
+        $intent = $step === 'review' ? $confirmations->inspect($scope, $actor['actor'], 'card_input', $confirmation) : $confirmations->consume($scope, $actor['actor'], 'card_input', $confirmation);
+        $body = $intent['body'];
+        if ((int)$body['client_id'] !== (int)$actor['client_id']) {
+            throw new Failure('invoice_access_denied');
+        }
+        if ($body['invoice_id']) {
+            $invoice = $a->bridge->invoice($body['invoice_id']);
+            if ($body['snapshot'] !== $a->snapshot($invoice)) {
+                throw new Failure('invoice_changed_during_payment');
+            }
+        }
+        if ($step === 'review') {
+            $this->page('Confirm card setup', CardInput::consentForm($a, $body, $confirmation));
+            return;
+        }
+        if ($body['invoice_id']) {
+            $result = (new Checkout($a))->start($body['invoice_id'], $actor['client_id'], true, $actor['actor'], 'bachs_card');
+            $url = $result['checkout_url'];
+        } else {
+            $url = (new SavedMethods($a))->setup($actor['client_id'], $actor['actor']);
+        }
+        $this->redirect($url);
     }
 
     public function manage()

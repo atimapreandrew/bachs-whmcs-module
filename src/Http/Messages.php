@@ -14,6 +14,11 @@ class Messages
             'client_payment_access_denied' => 'You do not have permission to manage payments for this billing account.',
             'invoice_access_denied' => 'You do not have access to this invoice.',
             'currency_not_enabled' => 'Bachs is unavailable for this invoice currency. Choose another payment method.',
+            'payment_methods_required' => 'Select at least one payment method or choose all available methods.',
+            'card_method_not_enabled' => 'Card payments in this currency are disabled. Choose another payment method.',
+            'invoice_payment_method_unavailable' => 'No enabled Bachs payment method can collect this invoice currency. Choose another payment method.',
+            'automatic_payment_consent_required' => 'Confirm your consent to save this card and collect future WHMCS invoices.',
+            'invoice_changed_during_payment' => 'This invoice has changed. Open it again to continue with the current amount.',
             'sandbox_installation_confirmation_required' => 'Confirm this is a separate test installation before enabling sandbox payments.',
             'automatic_payments_disabled' => 'Automatic card payments are disabled in Bachs settings.',
             'native_card_version_not_supported' => 'Automatic card payments require WHMCS 7.9 or later.',
@@ -36,7 +41,7 @@ class Messages
 
     public static function state($state)
     {
-        $map = array('posted' => 'Payment received.', 'open' => 'Complete your payment in Bachs.',
+        $map = array('posted' => 'Payment received.', 'setup_completed' => 'Card setup completed. Your saved card will appear after confirmation.', 'open' => 'Complete your payment in Bachs.',
             'pending' => 'Confirming your payment…', 'creating' => 'Preparing secure checkout…',
             'outcome_unknown' => 'Your payment is still being confirmed. You can return to this invoice later.',
             'review' => 'Your payment needs a review. Please contact billing support.',

@@ -7,6 +7,7 @@ foreach (array('NGN' => '150000.00','USDT_TRC20' => '100.012345') as $currency =
         $at = beginPayment($a);
         $pid = $p->succeed($at);
         $p->payments[$pid]['currency'] = $currency;
+        $p->payments[$pid]['payment_method'] = $currency === 'NGN' ? 'CARD' : 'CRYPTO';
         $p->payments[$pid]['amount'] = $amount;
         $p->payments[$pid]['amount_paid'] = $amount;
         $p->payments[$pid]['amount_remaining'] = '0';

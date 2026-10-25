@@ -1,6 +1,6 @@
 # Installation
 
-Use a separate licensed WHMCS test site first. Check that web PHP and cron PHP meet WHMCS's requirements and provide cURL, OpenSSL, JSON, and PDO MySQL. The database needs InnoDB and utf8mb4, and the WHMCS System URL must use HTTPS.
+Check that web PHP and cron PHP meet WHMCS's requirements and provide cURL, OpenSSL, JSON, and PDO MySQL. The database needs InnoDB and utf8mb4, and the WHMCS System URL must use HTTPS.
 
 ## Install the module
 
@@ -36,13 +36,13 @@ Keep logs private. Multiple workers use database leases to avoid duplicate work.
 
 ## Saved cards and renewals
 
-Card saving and automatic billing are separate options and start disabled. To use them, enable card saving, test customer consent and card management, then enable automatic card payments and activate `bachs_card`. Native automatic billing requires WHMCS 7.9 or later.
+Card saving and automatic billing are separate options and start disabled. To use them, enable card saving, test customer consent and card management, then enable automatic card payments and activate `bachs_card`. Native automatic billing requires WHMCS 7.9 or later. The worker enrolls existing active, consented cards when automatic billing is enabled.
 
-WHMCS still creates invoices and controls renewal dates. Each charge requires an active method owned by that client, recorded consent, and the same invoice currency. Clients can turn off local automatic payments and manage their provider cards through Bachs. USD cards can be added without a charge; NGN cards are saved during an invoice payment.
+WHMCS still creates invoices and controls renewal dates. Each charge requires an active method owned by that client, recorded consent, and the same invoice currency. Clients can turn off local automatic payments and manage their provider cards through Bachs. USD cards can be added without a charge; NGN cards are saved during an invoice payment. Native card input keeps the invoice and current amount together, asks for consent, then opens Bachs. To replace a card, add a new Pay Method and remove the old one; existing card tokens cannot be edited in place.
 
 ## Refunds
 
-Open a recorded payment, enter the amount and reason, review the original payment, and confirm. Some crypto refunds also need a verified destination and network. Only one nonfailed refund is allowed per payment; a partial refund can prevent a later refund of the remainder.
+Open **Addons > Bachs > Payments**, select a recorded payment, enter the amount and reason, review the original payment, and confirm. Refund requests start in the addon because Bachs completes them asynchronously. The native gateway does not expose a synchronous refund action. Some crypto refunds also need a verified destination and network. Only one nonfailed refund is allowed per payment; a partial refund can prevent a later refund of the remainder.
 
 Refunds are asynchronous. Recheck the existing request after a timeout instead of submitting another. Once Bachs confirms success, use **Manual Refund Processed Externally / Record Only** on the WHMCS invoice with the displayed amount, transaction ID, and original-payment link. Recheck in Bachs to close the accounting task. The module does not automatically insert outgoing refund accounting.
 
@@ -52,9 +52,24 @@ NGN bank-transfer refunds are unsupported. Partial currency mappings must be ver
 
 Test actual checkout, failure, expiry, duplicate notifications, cron recovery, refunds, and your themes. Enter and verify the live key, register the live callback/secret, select Live, and enable payments. Never test sandbox payments on ordinary production invoices.
 
-Advanced settings control allowed invoice currencies, checkout methods, expiry, and saved-link retention. Leave method restrictions empty for Bachs's eligible selection. USD/NGN are the defaults. RWF/XAF/XOF invoice pricing, add-funds, and mass-payment invoices are unsupported.
+## Currencies and payment methods
 
-Converted USD payments are optional and off by default. Enable them only after checking real receipts. For assets outside the known two-decimal fiat currencies, enter the verified precision as `CODE=decimal places`, one per line. Unknown precision, incomplete collection, or a changed invoice sends the receipt to review instead of marking it paid.
+In **Connection & settings**, enable the invoice currencies you accept: USD, NGN, GHS, KES, MWK, RWF, TZS, UGX, XAF, XOF and ZMW. Add matching currency codes in WHMCS's currency settings. Existing currency selections are preserved when upgrading. Add-funds and mass-payment invoices are unsupported.
+
+Under **Payment methods**, choose **All available Bachs methods**, or **Only the methods selected below** and check the options you want:
+
+- USD cards and NGN cards, including supported card wallets where available.
+- NGN bank transfer.
+- Mobile money for GHS, KES, MWK, RWF, TZS, UGX, XAF, XOF and ZMW.
+- Crypto: USDT_TRC20, USDT_BEP20, USDT_ERC20, USDT_SOL, USDC_BEP20, ETH_ETH, SOL_SOL and BNB_BEP20.
+
+The Crypto switch controls the whole crypto method for WHMCS. Individual assets and networks follow your Bachs account's checkout settings. Bachs applies account approval, availability and payment minimums. Enabling an option in WHMCS cannot grant a method your Bachs account does not support. Card wallets follow Bachs's card support; they are not separate API corridors.
+
+**Let clients pay USD invoices in another supported currency, including crypto** accepts Bachs conversion while retaining the USD invoice amount. Enable adaptive pricing in your Bachs account too. Other invoice currencies always collect in their own currency; Bachs does not convert those at checkout. Turn this option off to offer only methods that collect the invoice currency. Crypto is available for USD invoice checkout with conversion enabled. Crypto assets are never used as invoice pricing currencies. Pending receipts retain the policy saved when their checkout began. Incomplete collection or a changed invoice sends a receipt to review.
+
+Card saving restricts checkout to the enabled card method in the invoice currency (USD or NGN). Adding a card without payment requires USD cards. Disabling a card method also blocks new automatic charges on that corridor. Existing payments continue to reconcile when a currency is disabled.
+
+Advanced settings control checkout expiry and saved-link retention.
 
 Staff access uses normal WHMCS addon access and native role permissions. Refunds require **Refund Invoice Payments**; diagnostic export requires **Client Data Export**. There is no second module role list.
 

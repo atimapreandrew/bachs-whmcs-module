@@ -71,12 +71,16 @@ class Connection
             throw new Failure('invalid_checkout_mode');
         }
         $methods = isset($input['methods']) ? $input['methods'] : array();
-        $known = array('USD_CARD','NGN_CARD','NGN_BANK_TRANSFER','MOMO_GHS','MOMO_KES','MOMO_TZS','MOMO_UGX','MOMO_XAF','MOMO_XOF','MOMO_RWF','MOMO_MWK','MOMO_ZMW','CRYPTO');
+        $known = array_keys(PaymentOptions::methods());
         if (!is_array($methods) || array_diff($methods, $known)) {
             throw new Failure('method_restriction_not_supported');
         }
-        $currencies = isset($input['currencies']) ? $input['currencies'] : array('USD','NGN');
-        if (!is_array($currencies) || !$currencies || array_diff($currencies, array('USD','NGN','GHS','KES','MWK','TZS','UGX','ZMW'))) {
+        $methodsMode = isset($input['methods_mode']) ? $input['methods_mode'] : ($methods ? 'selected' : 'all');
+        if (!in_array($methodsMode, array('all', 'selected'), true) || ($methodsMode === 'selected' && !$methods)) {
+            throw new Failure('payment_methods_required');
+        }
+        $currencies = isset($input['currencies']) ? $input['currencies'] : (isset($input['currencies_present']) ? array() : array_keys(PaymentOptions::currencies()));
+        if (!is_array($currencies) || !$currencies || array_diff($currencies, array_keys(PaymentOptions::currencies()))) {
             throw new Failure('currency_precision_gate');
         }
         if (isset($input['button_label']) && !is_string($input['button_label'])) {
@@ -86,11 +90,14 @@ class Connection
         if (strlen($label) < 3 || strlen($label) > 80) {
             throw new Failure('invalid_button_label');
         }
-        $precisions = array();
+        $precisions = $a->settings->get('collection_precision', array());
         if (isset($input['collection_precision']) && (!is_string($input['collection_precision']) || strlen($input['collection_precision']) > 8192)) {
             throw new Failure('invalid_collection_precision');
         }
         $precisionInput = isset($input['collection_precision']) ? trim($input['collection_precision']) : '';
+        if (isset($input['collection_precision'])) {
+            $precisions = array();
+        }
         if ($precisionInput !== '') {
             foreach (preg_split('/[\r\n,]+/', $precisionInput) as $entry) {
                 if (!preg_match('/^([A-Z][A-Z0-9_]{1,31})=([0-9]|1[0-8])$/D', trim($entry), $match)) {
@@ -116,7 +123,7 @@ class Connection
             }
         }
         foreach (
-            array('environment' => $environment, 'checkout_mode' => $mode, 'methods' => array_values($methods),
+            array('environment' => $environment, 'checkout_mode' => $mode, 'methods' => array_values(array_unique($methods)), 'methods_mode' => $methodsMode,
             'currencies' => array_values($currencies), 'button_label' => $label, 'enabled' => $enabled,
             'saved_methods' => !empty($input['saved_methods']), 'draining' => !empty($input['draining']),
             'adaptive_allocation' => !empty($input['adaptive_allocation']),

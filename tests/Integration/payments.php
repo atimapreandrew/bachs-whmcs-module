@@ -381,6 +381,7 @@ test('Provider token event without consent cannot enroll a card', function () {
 test('Saving consent, encrypted token enrollment, revocation and pending capture have one owner', function () {
     list($a,$p,$w,$scope) = environment();
     $a->settings->set('saved_methods', true);
+    $a->settings->set('automatic_payments', true);
     $w->invoices[42]['gateway'] = 'bachs_card';
     $r = (new Checkout($a))->start(42, 1, true, 'user:21', 'bachs_card');
     $at = $a->store->get('attempts', $r['attempt_id']);

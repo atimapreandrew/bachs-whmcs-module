@@ -81,23 +81,75 @@ class Settings
         if (isset($custom[$currency]) && is_int($custom[$currency]) && $custom[$currency] >= 0 && $custom[$currency] <= 18) {
             return $custom[$currency];
         }
-        if (in_array($currency, array('USD', 'NGN', 'GHS', 'KES', 'MWK', 'TZS', 'UGX', 'ZMW'), true)) {
+        if (isset(PaymentOptions::currencies()[$currency])) {
             return 2;
+        }
+        // Compare crypto exactly at the maximum supported decimal scale. This
+        // accepts provider strings without rounding them to fiat precision.
+        if (in_array($currency, PaymentOptions::crypto(), true)) {
+            return 18;
         }
         throw new Failure('collection_precision_unknown');
     }
 
     public function precision($currency)
     {
-        // Only supported two-decimal invoice currencies can enter native accounting.
-        $known = array('USD','NGN','GHS','KES','MWK','TZS','UGX','ZMW');
-        if (!in_array($currency, $known, true)) {
-            throw new Failure('currency_precision_gate');
-        }
-        $allowed = $this->get('currencies', array('USD','NGN'));
+        $precision = $this->invoicePrecision($currency);
+        $allowed = $this->get('currencies', array_keys(PaymentOptions::currencies()));
         if (!in_array($currency, $allowed, true)) {
             throw new Failure('currency_not_enabled');
         }
+        return $precision;
+    }
+
+    public function invoicePrecision($currency)
+    {
+        // Bachs API amounts use major-unit decimal strings, including CFA/RWF.
+        $known = array_keys(PaymentOptions::currencies());
+        if (!in_array($currency, $known, true)) {
+            throw new Failure('currency_precision_gate');
+        }
         return 2;
+    }
+
+    public function methods()
+    {
+        $selected = $this->get('methods', array());
+        $mode = $this->get('methods_mode', $selected ? 'selected' : 'all');
+        $methods = $mode === 'all' ? array_keys(PaymentOptions::methods()) : $selected;
+        if (!$methods) {
+            throw new Failure('payment_methods_required');
+        }
+        return $methods;
+    }
+
+    public function cardMethods($currency)
+    {
+        $card = $currency . '_CARD';
+        if (!in_array($card, array('USD_CARD', 'NGN_CARD'), true) || !in_array($card, $this->methods(), true)) {
+            throw new Failure('card_method_not_enabled');
+        }
+        return array($card);
+    }
+
+    public function checkoutMethods($currency, $save)
+    {
+        if ($save) {
+            return $this->cardMethods($currency);
+        }
+        $methods = $this->methods();
+        if ($currency === 'USD' && $this->get('adaptive_allocation', true)) {
+            return $methods;
+        }
+        $eligible = array();
+        foreach ($methods as $method) {
+            if (PaymentOptions::methodCurrency($method) === $currency) {
+                $eligible[] = $method;
+            }
+        }
+        if (!$eligible) {
+            throw new Failure('invoice_payment_method_unavailable');
+        }
+        return $eligible;
     }
 }

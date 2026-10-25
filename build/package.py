@@ -47,7 +47,7 @@ spl_autoload_register(function ($class) {
         shutil.copy2(ROOT / 'docs' / name, base / 'docs' / name)
     components = {str(p.relative_to(target)): digest(p) for p in files(target) if p.suffix == '.php' and library not in p.parents}
     manifest = dict(
-        version=VERSION, release_status='release_candidate',
+        version=VERSION,
         source_commit=source_commit(), source_tree_sha256=source_digest(),
         runtime_syntax_floor='PHP 5.6', target_whmcs='7.0–9.1',
         components=components,

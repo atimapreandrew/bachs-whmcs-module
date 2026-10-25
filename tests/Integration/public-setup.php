@@ -112,8 +112,8 @@ test('The native card entry point uses normal addon settings and safe hosted man
         $app->settings->set('saved_methods', true);
         $app->settings->set('automatic_payments', true);
         $form = bachs_card_remoteinput(array());
-        truth(strpos($form, 'Manage cards securely with Bachs') !== false);
-        truth(strpos($form, 'target="_top"') !== false);
+        truth(strpos($form, 'Continue to Bachs') !== false);
+        truth(strpos($form, 'name="step" value="review"') !== false);
         same(false, strpos($form, 'api_key') !== false);
     } finally {
         $runtime->setValue(null, $previous);

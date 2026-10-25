@@ -41,18 +41,24 @@ Provider refund status and native accounting status remain separate. RefundAdapt
 Use the current [Bachs docs](https://docs.bachs.io/llms.txt) before changing a field or endpoint.
 
 - Fixed live/sandbox hosts, Bearer authentication, verified TLS, no redirects, bounded requests/responses, decimal strings in major units.
-- [Checkout](https://docs.bachs.io/api-reference/payments/create-checkout-session) uses invoice pricing, a scoped customer, reference, and optional exact method restrictions.
+- [Checkout](https://docs.bachs.io/guides/checkout/checkout-sessions) uses invoice pricing, a scoped customer, reference, and optional exact method restrictions.
 - [Verification](https://docs.bachs.io/api-reference/checkout-sessions/get-checkout-session) follows the saved checkout's `charge.payment_id` to the [payment object](https://docs.bachs.io/api-reference/payments/object). Do not rewrite ID prefixes or use event/browser metadata as accounting proof.
 - [Saved-card charges](https://docs.bachs.io/api-reference/payments/create-a-charge) use an explicit owned method, currency, value, and reference. HTTP creation is not financial success.
 - [Refunds](https://docs.bachs.io/api-reference/refunds/create-refund) retain the original charge/reference and matching body/HTTP retry key. Full refunds omit amount. Success, processing, and failure are distinct.
 - Portal URLs are short-lived credentials and are never stored. Card deletion is managed by the provider portal; no undocumented API is invented.
 - Signing-secret rotation stays manual because the provider's guide and endpoint reference differ about overlap and returned secrets.
 
+PaymentOptions holds the documented 11 fiat pricing currencies, 13 method corridors and eight crypto collection assets. Invoice amounts use two-decimal major-unit strings. Crypto comparisons keep up to 18 decimal places without rounding. The checkout freezes its allowed methods and conversion policy; receipt verification maps `CARD` plus its currency back to the original corridor. Method restrictions are explicit in every invoice checkout request. Same-currency checkout uses `billing_currency` and only corridors that collect that currency. USD conversion also requires adaptive pricing in the Bachs account; the create-session API does not document a per-session `adaptive_pricing` field. Bachs controls individual crypto assets on the merchant account; the module does not change account-wide settings.
+
+CardInput binds native invoice/setup forms to the signed-in actor and merchant scope with a short-lived, single-use confirmation and CSRF. It stores no card fields and performs no provider writes during rendering. WHMCS auto-posts the initial form into its iframe to display consent; only the client's second POST consumes the intent and opens hosted checkout. New-card invoice checkout uses the fresh invoice snapshot; add-only setup never reads an invoice. Remote updates explicitly explain how to replace a card. TokenAdapter serializes native enrollment, treats `createCardPayMethod` as a boolean helper, and retrieves the actual ID through client-scoped `GetPayMethods`, matching the gateway and local opaque token. An interrupted creation is reconciled before any retry. When automatic billing is enabled later, the worker also enrolls earlier active, consented cards from the current merchant scope without charging them.
+
+The native `_refund` functions are omitted: WHMCS has no pending refund result in that contract. Requests instead start in the addon, where asynchronous provider state and subsequent native Record Only accounting remain explicit.
+
 WHMCS references: [gateway installation](https://developers.whmcs.com/payment-gateways/installation-activation), [callbacks](https://developers.whmcs.com/payment-gateways/callbacks), [refunds](https://developers.whmcs.com/payment-gateways/refunds), and [remote input](https://developers.whmcs.com/payment-gateways/remote-input-gateway).
 
 ## Test status
 
-The latest local run has 123 passing PHP tests with 333 assertions and 6 passing client behavior tests. It uses fake provider/native adapters, PHP 8.4.2, and SQLite. An eight-process test checks duplicate posting. JavaScript uses a small simulated DOM.
+The latest local run has 171 passing PHP tests with 475 assertions and 6 passing client behavior tests. It uses fake provider/native adapters, PHP 8.4.2, and SQLite. An eight-process test checks duplicate posting. JavaScript uses a small simulated DOM.
 
 Real Bachs sandbox transactions, licensed WHMCS, MySQL/MariaDB, older PHP executables, and rendered themes remain unverified. A PHP 5.6 token check is not a real legacy runtime test. Targets are WHMCS 7.0–9.1 with native card enrollment from 7.9; always use the PHP/ionCube/database versions supported by WHMCS.
 

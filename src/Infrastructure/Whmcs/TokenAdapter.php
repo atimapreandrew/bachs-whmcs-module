@@ -7,11 +7,13 @@ class TokenAdapter
 {
     private $settings;
     private $version;
+    private $api;
 
-    public function __construct($settings, $version)
+    public function __construct($settings, $version, $api)
     {
         $this->settings = $settings;
         $this->version = $version;
+        $this->api = $api;
     }
 
     public function enroll($method)
@@ -19,8 +21,31 @@ class TokenAdapter
         if (version_compare($this->version, '7.9', '<')) {
             return;
         }
-        if (!empty($method['data']['native_enrollment'])) {
+        $name = 'native_method:' . $method['id'];
+        $lease = $this->settings->store->acquire($name);
+        try {
+            $fresh = $this->settings->store->get('payment_methods', $method['id']);
+            $this->enrollLocked($fresh);
+        } finally {
+            $this->settings->store->release($name, $lease);
+        }
+    }
+
+    private function enrollLocked($method)
+    {
+        if (!$method || $method['state'] !== 'active') {
+            throw new \Bachs\Whmcs\Domain\Failure('saved_method_access_denied');
+        }
+        if (isset($method['data']['native_enrollment']) && $method['data']['native_enrollment'] === 'completed' && !empty($method['data']['pay_method_id'])) {
             return;
+        }
+        $existing = $this->find($method);
+        if ($existing) {
+            $this->complete($method, $existing);
+            return;
+        }
+        if (!empty($method['data']['native_enrollment'])) {
+            throw new \Bachs\Whmcs\Domain\Failure('native_card_enrollment_needs_review');
         }
         if (!function_exists('createCardPayMethod')) {
             throw new \Bachs\Whmcs\Domain\Failure('native_card_helper_unavailable');
@@ -38,7 +63,37 @@ class TokenAdapter
             null,
             $method['id']
         );
-        $this->settings->store->update('payment_methods', $method['id'], array('native_enrollment' => 'completed',
-            'pay_method_id' => is_object($result) && isset($result->id) ? (int)$result->id : null));
+        if ($result !== true) {
+            throw new \Bachs\Whmcs\Domain\Failure('native_card_enrollment_needs_review');
+        }
+        $id = $this->find($method);
+        if (!$id) {
+            throw new \Bachs\Whmcs\Domain\Failure('native_card_enrollment_needs_review');
+        }
+        $this->complete($method, $id);
+    }
+
+    private function find($method)
+    {
+        $result = $this->api->call('GetPayMethods', array('clientid' => (int)$method['client_id']));
+        if (!isset($result['paymethods']) || !is_array($result['paymethods'])) {
+            throw new \Bachs\Whmcs\Domain\Failure('native_pay_methods_contract_mismatch');
+        }
+        $id = null;
+        foreach ($result['paymethods'] as $native) {
+            if (isset($native['gateway_name'], $native['remote_token'], $native['id']) &&
+                $native['gateway_name'] === 'bachs_card' && $native['remote_token'] === $method['id']) {
+                if ($id !== null || empty($native['id']) || !isset($native['type']) || $native['type'] !== 'RemoteCreditCard') {
+                    throw new \Bachs\Whmcs\Domain\Failure('native_card_mapping_conflict');
+                }
+                $id = (int)$native['id'];
+            }
+        }
+        return $id;
+    }
+
+    private function complete($method, $id)
+    {
+        $this->settings->store->update('payment_methods', $method['id'], array('native_enrollment' => 'completed', 'pay_method_id' => $id));
     }
 }

@@ -25,10 +25,7 @@ class Confirmations
 
     public function consume($scope, $actor, $action, $token)
     {
-        $row = $this->app->store->find('settings', $scope['id'], 'confirmation:' . hash('sha256', $token));
-        if (!$row || $row['data']['actor'] !== $actor || $row['data']['action'] !== $action || $row['data']['expires_at'] < $this->app->store->clock->now()) {
-            throw new Failure('confirmation_invalid_or_expired');
-        }
+        $row = $this->find($scope, $actor, $action, $token);
         $updated = $this->app->store->run("UPDATE mod_bachs_settings SET state='consumed' WHERE id=? AND state='preview'", array($row['id']))->rowCount();
         if (!$updated) {
             throw new Failure('confirmation_already_used');
@@ -36,5 +33,23 @@ class Confirmations
         $payload = json_decode($this->app->settings->secrets->open($row['data']['payload']), true);
         $payload['identity'] = 'confirmed:' . $row['id'];
         return $payload;
+    }
+
+    public function inspect($scope, $actor, $action, $token)
+    {
+        $row = $this->find($scope, $actor, $action, $token);
+        if ($row['state'] !== 'preview') {
+            throw new Failure('confirmation_already_used');
+        }
+        return json_decode($this->app->settings->secrets->open($row['data']['payload']), true);
+    }
+
+    private function find($scope, $actor, $action, $token)
+    {
+        $row = $this->app->store->find('settings', $scope['id'], 'confirmation:' . hash('sha256', $token));
+        if (!$row || $row['data']['actor'] !== $actor || $row['data']['action'] !== $action || $row['data']['expires_at'] < $this->app->store->clock->now()) {
+            throw new Failure('confirmation_invalid_or_expired');
+        }
+        return $row;
     }
 }
