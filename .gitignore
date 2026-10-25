@@ -1,0 +1,13 @@
+/.validation/
+/dist/
+/.env*
+/node_modules/
+/vendor/
+*.log
+*.sqlite*
+/.DS_Store
+__pycache__/
+*.pyc
+*.bundle
+.idea/
+.vscode/

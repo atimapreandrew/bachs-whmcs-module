@@ -1,0 +1,25 @@
+{
+  "whmcs_version": "REPLACE_WITH_EXACT_LICENSED_VERSION",
+  "php_version": "REPLACE_WITH_EXACT_WEB_AND_CLI_VERSION",
+  "isolated_staging": false,
+  "nonfulfilling_test_invoices": [],
+  "collection_precision": {},
+  "features": {
+    "sandbox": {
+      "collection": false,
+      "saved_methods": false,
+      "native_card": false,
+      "adaptive_pricing": false,
+      "refunds": false,
+      "special_invoices": false
+    },
+    "live": {
+      "collection": false,
+      "saved_methods": false,
+      "native_card": false,
+      "adaptive_pricing": false,
+      "refunds": false,
+      "special_invoices": false
+    }
+  }
+}

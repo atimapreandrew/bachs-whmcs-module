@@ -1,0 +1,24 @@
+{
+  "kind": "synthetic",
+  "created_at": "2026-10-25",
+  "merchant_credentials_used": false,
+  "provider_transactions_executed": false,
+  "source": "Official Bachs and WHMCS documentation; test objects are synthetic.",
+  "fixtures": [
+    "tests/bootstrap.php generated checkout/payment/refund/event objects",
+    "tests/Contract/provider.php transport responses",
+    "tests/Integration/allocation.php synthetic converted-collection cases"
+  ],
+  "primary_sources": [
+    "https://docs.bachs.io/api-reference/payments/create-checkout-session",
+    "https://docs.bachs.io/api-reference/checkout-sessions/get-checkout-session",
+    "https://docs.bachs.io/api-reference/payments/object",
+    "https://docs.bachs.io/api-reference/payments/create-a-charge",
+    "https://docs.bachs.io/api-reference/refunds/create-refund",
+    "https://docs.bachs.io/guides/webhooks/overview",
+    "https://docs.bachs.io/guides/payments/charge-a-saved-card",
+    "https://developers.whmcs.com/payment-gateways/callbacks",
+    "https://developers.whmcs.com/payment-gateways/remote-input-gateway"
+  ],
+  "notes": "Opaque synthetic identifiers and example.invalid identities; no real event, sandbox result, licensed WHMCS result or production support claim. Money stays a decimal string. Test objects prove local invariants only."
+}
