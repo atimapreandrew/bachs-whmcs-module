@@ -124,7 +124,7 @@ def main():
     expected_checksums = f'{digest(archive_path)}  {archive_name}\n'
     if (DIST / 'SHA256SUMS').read_text() != expected_checksums:
         errors.append('ZIP checksum mismatch')
-    if any('/docs/' in name and not name.endswith(('installation.md', 'development.md')) for name in names):
+    if any('/docs/' in name and not name.endswith(('installation.md', 'development.md', 'audit.md')) for name in names):
         errors.append('Old development paperwork shipped')
     if library_path + 'src/Infrastructure/Whmcs/Acceptance.php' in names:
         errors.append('Removed private acceptance-file gate shipped')

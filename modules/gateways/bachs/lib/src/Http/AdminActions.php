@@ -12,7 +12,7 @@ class AdminActions
     public static $permissions = array('verify' => 'manage_settings',
         'replay' => 'manage_webhooks', 'recheck' => 'view_payments', 'refund_preview' => 'request_refunds', 'refund_confirm' => 'request_refunds',
         'refund_recheck' => 'finalize_refund_accounting', 'refund_map' => 'finalize_refund_accounting', 'resolve' => 'view_payments', 'revoke' => 'manage_settings',
-        'export' => 'export_diagnostics');
+        'retry_job' => 'manage_webhooks', 'export' => 'export_diagnostics');
 
     public function __construct($app)
     {
@@ -65,6 +65,15 @@ class AdminActions
             $a->queue->wake($job, true);
             return array('message' => 'Provider recheck queued.');
         }
+        if ($action === 'retry_job') {
+            $job = $a->store->get('jobs', $target);
+            if (!$job || $job['scope'] !== $scope['id'] || !in_array($job['state'], array('dead','retry'), true)) {
+                throw new Failure('retryable_job_required');
+            }
+            $a->queue->wake($job, true);
+            $a->store->audit($who, 'job_retry_requested', $scope['id'], $target);
+            return array('message' => 'The existing job is queued for another check. Its payment identity is unchanged.');
+        }
         if ($action === 'refund_preview') {
             $payment = $a->store->get('payments', $target);
             if (!$payment || $payment['scope'] !== $scope['id']) {
@@ -74,7 +83,7 @@ class AdminActions
                 'reason' => Input::text($input, 'reason', '', 500), 'address' => Input::text($input, 'refund_address', '', 255),
                 'network' => Input::text($input, 'network', '', 40));
             $resource = $a->provider($scope)->request('GET', '/v1/payments/' . rawurlencode($payment['data']['payment_id']));
-            $preview = (new Confirmations($a))->preview($scope, $who, 'refund', $body, array('payment' => $resource,
+            $preview = (new Confirmations($a))->preview($scope, $who, 'refund', $body, array('payment' => \Bachs\Whmcs\Infrastructure\SafeData::redact($resource),
                 'warning' => 'One nonfailed refund is allowed per payment. A partial refund prevents a later refund of the remainder.', 'invoice_amount' => $payment['data']['amount'], 'invoice_currency' => $payment['data']['currency']));
             return $this->preview($preview, 'refund_confirm');
         }

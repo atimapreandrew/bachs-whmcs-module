@@ -32,7 +32,7 @@ Opening the addon does not contact Bachs or verify credentials. It can open befo
 
 ## Webhooks
 
-The optional addon shows callback URLs at **Addons → Bachs Payments → Webhooks and jobs**. You can also use the URLs below. Copy the callback for the environment, including any WHMCS subdirectory:
+The optional addon shows callback URLs at **Addons → Bachs Payments → Webhooks**. You can also use the URLs below. Copy the callback for the environment, including any WHMCS subdirectory:
 
 ```text
 https://billing.example.com/modules/gateways/callback/bachs.php?environment=sandbox
@@ -53,7 +53,7 @@ For faster checks, run the optional CLI worker every minute using your actual pa
 * * * * * /path/to/php /path/to/whmcs/modules/gateways/bachs/bin/worker.php --limit=50 --seconds=20 >> /private/logs/bachs-worker.log 2>&1
 ```
 
-Keep logs private. Database leases coordinate multiple workers. Do not add a public HTTP cron endpoint.
+Keep logs private. Database leases coordinate multiple workers. Use **Addons → Bachs Payments → Background jobs** to inspect jobs. Authorized staff can retry an existing failed job there; the original payment identity stays fixed. Do not add a public HTTP cron endpoint.
 
 ## Saved cards and renewals
 
@@ -61,7 +61,7 @@ Enable **Save cards** in the main **Bachs** gateway. USD cards can be added with
 
 For automatic collection, activate the optional **Bachs saved card** gateway and enable **Automatic card payments** in the main Bachs settings. Use Bachs saved card for the invoices that should use automatic billing. The worker enrolls active, consented cards as native WHMCS Pay Methods.
 
-WHMCS creates renewal invoices and controls collection dates. Each charge requires an owned active method, consent and the same invoice currency. Disabling a card method blocks new charges through that method. To replace a card, add a new Pay Method and remove the old one. Existing card tokens cannot be edited in place.
+WHMCS creates renewal invoices and controls collection dates. Each charge requires an owned active method, consent and the same invoice currency. Disabling a card method blocks new charges through that method. To replace a card, add a new Pay Method and remove the old one. Existing card tokens cannot be edited in place. Removing a native Bachs Pay Method also turns off its local automatic collection. Expired cards must be replaced.
 
 ## Currencies and conversion
 
@@ -77,7 +77,7 @@ Open **Addons → Bachs Payments → Payments**, inspect the payment, enter the 
 
 Requests are asynchronous. Recheck an existing request after a timeout. After Bachs confirms success, use **Manual Refund Processed Externally / Record Only** on the WHMCS invoice with the displayed amount, transaction ID and original-payment link. Recheck the refund to finish the accounting task.
 
-The native gateway does not expose a synchronous refund button. NGN bank-transfer refunds are unsupported. Partial refunds require a verified invoice-currency mapping.
+The native gateway does not expose a synchronous refund button. NGN bank-transfer refunds are unsupported. Partial refunds require a verified invoice-currency mapping. Missing or partial settlement, including a failed refund that returned some money, stays in review before native accounting. Do not create a replacement refund while that review is open.
 
 ## Staff access and server settings
 
@@ -92,6 +92,7 @@ The module uses WHMCS encryption. Back up the WHMCS encryption configuration tog
 - **Gateway missing:** confirm the entry file is directly at `modules/gateways/bachs.php`, refresh All Payment Gateways, and check the WHMCS activity log. The gateway list does not need API credentials or module tables to discover Bachs.
 - **Addon will not open:** check the displayed reference in **Utilities → Logs → Activity Log**. The message identifies missing files, database permissions, staff access or an invalid System URL. Upload the complete ZIP when files do not match. The database user needs permission to create the module tables and indexes on first use.
 - **Settings not applied:** save the native gateway form, then verify the saved configuration. Correct the message shown under Addons > Bachs Payments > Status.
+- **Client.php line zero when paying:** upload the complete current package. Client payment access uses the account owner or the signed-in user's invoice permission. Staff Login as Owner is supported; invited users need invoice access for the selected account.
 - **No payment recorded:** check signed deliveries, worker health and the review list. A browser return does not prove payment.
 - **Unknown outcome:** keep the existing request identity and recheck it before trying another payment.
 - **Signature rejected:** check the environment, secret, server clock, callback URL and proxy rules.

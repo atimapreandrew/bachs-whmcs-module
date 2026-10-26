@@ -29,9 +29,29 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
         if (!$customer || $customer['state'] !== 'active') {
             throw new Failure('saved_method_customer_unmapped');
         }
-        $consents = $a->store->listing('consents', array('scope' => $event['scope'], 'client_id' => $customer['client_id'], 'state' => 'active'), 50);
+        $existing = $a->store->find('payment_methods', $event['scope'], $d['token_hash']);
+        if ($existing) {
+            if ((int)$existing['client_id'] !== (int)$customer['client_id'] || $existing['data']['customer_id'] !== $d['customer_id']) {
+                throw new Failure('saved_method_access_denied');
+            }
+            if ($existing['state'] === 'revoked') { return; }
+            $this->owned($existing['id'], $event['scope'], $customer['client_id']);
+            $a->bridge->enrollMethod($existing);
+            return;
+        }
+        if (!empty($d['checkout_id'])) {
+            $source = $a->store->byProvider('attempts', $event['scope'], $d['checkout_id']);
+            $candidate = $source && !empty($source['data']['consent_id']) ? $a->store->get('consents', $source['data']['consent_id']) : null;
+            $consents = $candidate && $candidate['state'] === 'active' && $candidate['scope'] === $event['scope'] &&
+                (int)$candidate['client_id'] === (int)$customer['client_id'] ? array($candidate) : array();
+        } else {
+            $consents = $a->store->listing('consents', array('scope' => $event['scope'], 'client_id' => $customer['client_id'], 'state' => 'active'), 50);
+        }
         $consent = null;
         foreach ($consents as $candidate) {
+            if ($candidate['created_at'] > $event['created_at'] || $event['created_at'] - $candidate['created_at'] > 86400) {
+                continue;
+            }
             if ($candidate['data']['customer_id'] !== $d['customer_id']) {
                 continue;
             }
@@ -85,8 +105,12 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
             throw new Failure('saved_method_access_denied');
         }
         $consent = $this->app->store->get('consents', $method['data']['consent_id']);
-        if (!$consent || $consent['state'] !== 'active') {
+        if (!$consent || $consent['state'] !== 'active' || $consent['scope'] !== $scope || (int)$consent['client_id'] !== (int)$clientId) {
             throw new Failure('automatic_payment_consent_revoked');
+        }
+        if (isset($method['data']['expiry_year'], $method['data']['expiry_month']) &&
+            sprintf('%04d%02d', $method['data']['expiry_year'], $method['data']['expiry_month']) < gmdate('Ym', $this->app->store->clock->now())) {
+            throw new Failure('saved_card_expired');
         }
         return $method;
     }
@@ -184,7 +208,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
                 $r = $a->operations->send($op, $scope, $a->provider($scope));
             } catch (\Throwable $error) {
                 $saved = $a->store->get('operations', $op['id']);
-                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown');
+                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown', array(), array('creating','outcome_unknown'));
                 throw $error;
             }
             return (new Checkout($a))->presentation((new Checkout($a))->accept($attempt, $r))['checkout_url'];
@@ -213,6 +237,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
             if ($method['data']['currency'] !== $invoice['currency']) {
                 throw new Failure('saved_card_currency_gate');
             }
+            $providerToken = Ids::opaque($a->settings->secrets->open($method['data']['token']));
             foreach ($a->store->unfinishedAttempts($invoiceId) as $existing) {
                 if (!in_array($existing['state'], array('failed','expired_verified','cancelled_verified','posted'), true)) {
                     $a->job('attempt', $existing['scope'], $existing['id']);
@@ -226,7 +251,7 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
                 'gateway' => 'bachs_card', 'method_id' => $methodId, 'accounting_owner' => 'module'), 'creating', array('invoice_id' => (int)$invoiceId, 'client_id' => (int)$invoice['client_id']));
             $a->store->insert('settings', $scope['id'], 'attempt_reference:' . $reference, array('attempt_id' => $attempt['id']), 'index');
             $op = $a->operations->prepare($scope, 'capture:' . $attempt['id'], 'POST', '/v1/charges', array('customer' => $method['data']['customer_id'],
-                'payment_method' => $a->settings->secrets->open($method['data']['token']), 'amount' => $attempt['data']['amount'], 'currency' => $invoice['currency'],
+                'payment_method' => $providerToken, 'amount' => $attempt['data']['amount'], 'currency' => $invoice['currency'],
                 'reference' => $reference, 'description' => 'WHMCS invoice ' . (int)$invoiceId,
                 'metadata' => array('integration' => 'whmcs', 'attempt_id' => $attempt['id'])));
             $a->store->update('attempts', $attempt['id'], array('operation_id' => $op['id']));
@@ -236,13 +261,13 @@ class SavedMethods implements \Bachs\Whmcs\Domain\TokenStore
                 $response = $a->operations->send($op, $scope, $a->provider($scope));
             } catch (\Throwable $e) {
                 $saved = $a->store->get('operations', $op['id']);
-                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown');
+                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown', array(), array('creating','outcome_unknown'));
                 throw $e;
             }
             if (!isset($response['payment_id'])) {
                 throw new Failure('capture_contract_mismatch');
             }
-            $a->store->update('attempts', $attempt['id'], array('payment_id' => Ids::opaque($response['payment_id'])), 'pending');
+            $a->store->update('attempts', $attempt['id'], array('payment_id' => Ids::opaque($response['payment_id'])), 'pending', array(), array('creating','outcome_unknown','pending'));
             // Consistently asynchronous: WHMCS never receives a success that could double-post.
             return array('status' => 'pending', 'rawdata' => array('attempt_id' => $attempt['id']));
         } finally {

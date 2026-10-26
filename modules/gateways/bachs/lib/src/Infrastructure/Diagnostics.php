@@ -24,6 +24,10 @@ final class Diagnostics
         self::$reported[$key] = $result;
         $line = 'Bachs [' . $reference . '] ' . $context . ': ' . $code
             . '; ' . get_class($error) . ' at ' . basename($error->getFile()) . ':' . $error->getLine();
+        $calls = self::calls($error);
+        if ($calls !== '') {
+            $line .= '; calls=' . $calls;
+        }
         if ($error instanceof \PDOException && isset($error->errorInfo[0], $error->errorInfo[1])) {
             $state = preg_replace('/[^A-Z0-9]/', '', substr((string)$error->errorInfo[0], 0, 5));
             $line .= '; SQLSTATE=' . $state . '; driver=' . (int)$error->errorInfo[1];
@@ -42,6 +46,23 @@ final class Diagnostics
             }
         }
         return $result;
+    }
+
+    private static function calls(\Throwable $error)
+    {
+        $calls = array();
+        foreach (array_slice($error->getTrace(), 0, 4) as $frame) {
+            $class = isset($frame['class']) ? $frame['class'] : '';
+            $method = isset($frame['function']) ? $frame['function'] : '';
+            // Only identifiers, never arguments, messages or absolute paths.
+            if (!is_string($class) || !is_string($method) || strlen($class) > 160
+                || ($class !== '' && !preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', str_replace('\\', '_', $class)))
+                || !preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,80}$/D', $method)) {
+                continue;
+            }
+            $calls[] = ($class === '' ? '' : $class . '::') . $method;
+        }
+        return implode(' > ', $calls);
     }
 
     private static function code($error)
@@ -71,6 +92,7 @@ final class Diagnostics
     public static function message(array $report)
     {
         $messages = array('incomplete_upload' => 'The Bachs files do not match. Upload the complete installation ZIP.',
+            'module_schema_newer' => 'The database belongs to a newer Bachs module. Upload a matching or newer complete package.',
             'runtime_library_missing' => 'The Bachs runtime files are missing. Upload the complete modules folder.',
             'whmcs_version_not_supported' => 'Bachs requires WHMCS 8.0 or later.',
             'php_version_not_supported' => 'Use a PHP version supported by your WHMCS release, with PHP 7.2 or later.',

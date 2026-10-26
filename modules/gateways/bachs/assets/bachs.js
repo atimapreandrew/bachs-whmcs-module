@@ -26,6 +26,7 @@
     try { var u = new URL(value); return u.protocol === 'https:' && u.hostname === 'checkout.bachs.io' && !u.port && !u.username && !u.password && !u.hash ? u.href : null; } catch (_) { return null; }
   }
   function poll(root, id) {
+    if (!window.fetch || !window.URL || !window.Promise) return;
     var count = 0;
     function check() {
       if (count++ >= 12) { announce(root, 'Your payment is still being confirmed. You can return to this invoice later.'); root.removeAttribute('aria-busy'); return; }

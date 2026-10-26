@@ -21,14 +21,21 @@ class ClientView
 
     public static function render($app, $vars)
     {
-        $actor = $app->bridge->identity->client();
-        $root = $app->bridge->systemUrl() . '/modules/gateways/bachs';
         $h = function ($value) { return SafeData::html($value); };
         $content = '';
         if (!empty($_SESSION['bachs_notice'])) {
             $content .= '<div class="alert alert-info" role="status">' . $_SESSION['bachs_notice'] . '</div>';
             unset($_SESSION['bachs_notice']);
         }
+        try {
+            $actor = $app->bridge->identity->client();
+        } catch (\Bachs\Whmcs\Domain\Failure $error) {
+            if ($content !== '' && in_array($error->reason, array('client_login_required','client_payment_access_denied','client_permissions_unavailable'), true)) {
+                return '<div id="bachs-client-controls">' . $content . '</div>';
+            }
+            throw $error;
+        }
+        $root = $app->bridge->systemUrl() . '/modules/gateways/bachs';
         $attemptId = Input::text($_GET, 'bachs_attempt', '', 48);
         if ($attemptId !== '') {
             $attempt = $app->store->get('attempts', $attemptId);

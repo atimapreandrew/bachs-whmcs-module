@@ -27,7 +27,7 @@ class ClientController
         if (!in_array($gateway, array('bachs', 'bachs_card'), true)) {
             throw new Failure('gateway_not_bachs');
         }
-        $r = (new Checkout($a))->start($invoiceId, $actor['client_id'], !empty($_POST['save_method']), $actor['actor'], $gateway);
+        $r = (new Checkout($a))->start($invoiceId, $actor['client_id'], Input::checked($_POST, 'save_method'), $actor['actor'], $gateway);
         if ($this->wantsJson()) {
             $this->json($r);
         } else {
@@ -76,6 +76,7 @@ class ClientController
         try {
             $actor = $a->bridge->identity->client();
         } catch (Failure $e) {
+            if ($e->reason !== 'client_login_required') { throw $e; }
             $this->page('Sign in to continue', '<p>Sign in to your billing account, then return to this payment page.</p><a href="' . SafeData::html($a->bridge->systemUrl() . '/clientarea.php') . '">Sign in</a>');
             return;
         }
@@ -109,7 +110,7 @@ class ClientController
         if (!in_array($step, array('review', 'confirm'), true)) {
             throw new Failure('unknown_client_action');
         }
-        if ($step === 'confirm' && empty($_POST['consent'])) {
+        if ($step === 'confirm' && !Input::checked($_POST, 'consent')) {
             throw new Failure('automatic_payment_consent_required');
         }
         $a->assertCardBilling();
@@ -148,11 +149,12 @@ class ClientController
         $a->bridge->identity->csrf();
         $action = Input::text($_POST, 'action', '', 16);
         if ($action === 'portal') {
+            (new RateLimit($a->store))->check('portal:' . $actor['client_id'], 5);
             $this->redirect((new SavedMethods($a))->portal($actor['client_id']));
             return;
         }
         if ($action === 'setup') {
-            if (empty($_POST['consent'])) {
+            if (!Input::checked($_POST, 'consent')) {
                 throw new Failure('automatic_payment_consent_required');
             }
             (new RateLimit($a->store))->check('setup:' . $actor['client_id'], 5);
@@ -173,12 +175,12 @@ class ClientController
         $unexpected = !$error instanceof Failure || $reason === 'internal_error';
         $message = Messages::error($reason);
         $reference = null;
-        if ($unexpected) {
+        if ($unexpected || $reason === 'client_permissions_unavailable') {
             $report = \Bachs\Whmcs\Infrastructure\Diagnostics::report($error, 'client_request');
             $reference = $report['reference'];
-            $message = 'Bachs could not complete this request. Please try again later. Reference: ' . $reference;
+            $message = ($unexpected ? 'Bachs could not complete this request. Please try again later.' : $message) . ' Reference: ' . $reference;
         }
-        $status = $unexpected ? 500 : ($reason === 'rate_limited' ? 429 : (strpos($reason, 'access_denied') !== false || $reason === 'csrf_required' ? 403 : 400));
+        $status = $reason === 'client_permissions_unavailable' ? 503 : ($unexpected ? 500 : ($reason === 'rate_limited' ? 429 : (strpos($reason, 'access_denied') !== false || $reason === 'csrf_required' ? 403 : 400)));
         http_response_code($status);
         if ($this->wantsJson()) {
             $this->json(array('error' => $reason, 'message' => $message, 'reference' => $reference), $status);

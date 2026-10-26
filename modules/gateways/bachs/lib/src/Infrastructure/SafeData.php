@@ -4,6 +4,18 @@ namespace Bachs\Whmcs\Infrastructure;
 
 final class SafeData
 {
+    public static function shortText($value, $bytes)
+    {
+        if (!is_string($value) || preg_match('//u', $value) !== 1) {
+            throw new \Bachs\Whmcs\Domain\Failure('invalid_text_encoding');
+        }
+        $text = substr($value, 0, $bytes);
+        while ($text !== '' && preg_match('//u', $text) !== 1) {
+            $text = substr($text, 0, -1);
+        }
+        return $text;
+    }
+
     public static function redact($data)
     {
         if (!is_array($data)) {
@@ -27,7 +39,7 @@ final class SafeData
                 if (preg_match('/sk_(live|sandbox)_|whsec_|https?:\/\/|Bearer |pm_[A-Za-z0-9]/i', $s)) {
                     $out[$k] = '[redacted]';
                 } else {
-                    $out[$k] = is_string($v) ? substr($v, 0, 255) : $v;
+                    $out[$k] = is_string($v) ? self::shortText($v, 255) : $v;
                 }
             }
         }

@@ -24,7 +24,7 @@ class Bridge implements \Bachs\Whmcs\Domain\InvoiceReader, \Bachs\Whmcs\Domain\P
         if (version_compare($this->version, '8.0', '<')) {
             throw new Failure('whmcs_version_not_supported');
         }
-        $this->identity = new Identity();
+        $this->identity = new Identity($api);
     }
 
     public function invoice($id)

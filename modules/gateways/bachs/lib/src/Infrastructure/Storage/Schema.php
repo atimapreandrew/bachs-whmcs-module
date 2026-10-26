@@ -15,6 +15,9 @@ class Schema
         try {
             $row = $pdo->query('SELECT data FROM mod_bachs_schema_migrations LIMIT 1')->fetch(\PDO::FETCH_ASSOC);
             $data = $row ? json_decode($row['data'], true) : array();
+            if (isset($data['version']) && (int)$data['version'] > self::VERSION) {
+                throw new \Bachs\Whmcs\Domain\Failure('module_schema_newer');
+            }
             if (isset($data['version']) && (int)$data['version'] >= self::VERSION) {
                 return;
             }

@@ -5,13 +5,13 @@ import assert from 'node:assert/strict';
 const source = fs.readFileSync(new URL('../../modules/gateways/bachs/assets/bachs.js', import.meta.url), 'utf8');
 let passed = 0;
 const flush = async () => { for (let i=0;i<12;i++) await Promise.resolve(); };
-function fixture({url='https://checkout.bachs.io/c/synthetic', sdk=false, fetchEnabled=true, delay=false}={}) {
+function fixture({url='https://checkout.bachs.io/c/synthetic', sdk=false, fetchEnabled=true, delay=false, returned=false}={}) {
   const status={textContent:''}, fallback={hidden:true,focus(){this.focused=true;}}, button={disabled:false,focus(){this.focused=true;}}, attrs={};
   const form={action:'https://billing.example.invalid/modules/gateways/bachs/checkout.php',querySelector(){return button;},addEventListener(type,cb){this.submit=cb;}};
-  const root={querySelector(selector){return selector==='[data-bachs-status]'?status:selector==='[data-bachs-fallback]'?fallback:form;},setAttribute(k,v){attrs[k]=v;},removeAttribute(k){delete attrs[k];},getAttribute(){return 'https://billing.example.invalid/modules/gateways/bachs/status.php';}};
+  const root={querySelector(selector){return selector==='[data-bachs-status]'?status:selector==='[data-bachs-fallback]'?fallback:form;},setAttribute(k,v){attrs[k]=v;},removeAttribute(k){delete attrs[k];},getAttribute(name){return name==='data-attempt'?'synthetic':'https://billing.example.invalid/modules/gateways/bachs/status.php';}};
   let script, calls=[], resolveFetch, initialized=0, onEvent;
   const result={attempt_id:'synthetic',mode:'overlay',checkout_url:url};
-  const window={location:{href:'https://billing.example.invalid/viewinvoice.php?id=42',assign(u){this.assigned=u;}},FormData:class {},Promise};
+  const window={location:{href:'https://billing.example.invalid/viewinvoice.php?id=42',assign(u){this.assigned=u;}},FormData:class {},Promise,URL};
   if(fetchEnabled)window.fetch=true;
   if(sdk) window.Bachs={Initialize(options){initialized++;onEvent=options.onEvent;},Checkout:{open(options){this.url=options.checkoutUrl;}}};
   const fetch=(path,opts)=>{
@@ -19,7 +19,7 @@ function fixture({url='https://checkout.bachs.io/c/synthetic', sdk=false, fetchE
     if(delay && calls.length===1)return new Promise(resolve=>{resolveFetch=()=>resolve({ok:true,json:async()=>result});});
     return Promise.resolve({ok:true,json:async()=>opts.method==='POST'?result:{state:'pending',message:'Confirming your payment…',invoice_paid:false}});
   };
-  const ctx={window,document:{querySelectorAll(s){return s==='[data-bachs-payment]'?[root]:[];},createElement(){return script={};},head:{appendChild(){}}},fetch,URL,Promise,FormData:class {},AbortController:class {constructor(){this.signal={};}abort(){}},setTimeout(){return 1;},clearTimeout(){}};
+  const ctx={window,document:{querySelectorAll(s){return s==='[data-bachs-payment]'?[root]:s==='[data-bachs-return]'&&returned?[root]:[];},createElement(){return script={};},head:{appendChild(){}}},fetch,URL,Promise,FormData:class {},AbortController:class {constructor(){this.signal={};}abort(){}},setTimeout(){return 1;},clearTimeout(){}};
   vm.runInNewContext(source,ctx);
   return {form,root,status,fallback,button,calls,attrs,get script(){return script;},get initialized(){return initialized;},get onEvent(){return onEvent;},resolve(){resolveFetch();},window};
 }
@@ -30,4 +30,5 @@ await test('Browser completion stays pending until the server confirms recording
 await test('Overlay initializes once and restores keyboard focus on close',async()=>{const f=fixture({sdk:true});f.form.submit({preventDefault(){}});await flush();f.onEvent({type:'checkout.closed'});await flush();assert.equal(f.button.focused,true);assert.equal(f.button.disabled,false);f.form.submit({preventDefault(){}});await flush();assert.equal(f.initialized,1);});
 await test('Unsafe checkout origin cannot be exposed or opened',async()=>{const f=fixture({url:'https://checkout.bachs.io.evil.invalid/c/token'});f.form.submit({preventDefault(){}});await flush();assert.equal(f.fallback.hidden,true);assert.match(f.status.textContent,/could not be opened/);});
 await test('Without fetch the native POST form remains the payment path',async()=>{const f=fixture({fetchEnabled:false});let prevented=false;f.form.submit({preventDefault(){prevented=true;}});assert.equal(prevented,false);assert.equal(f.calls.length,0);});
+await test('Return status remains readable when fetch is unavailable',async()=>{const f=fixture({fetchEnabled:false,returned:true});await flush();assert.equal(f.calls.length,0);});
 console.log(`${passed} client behavior unit tests passed. Browser rendering remains a separate gate.`);

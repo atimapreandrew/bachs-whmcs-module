@@ -50,7 +50,11 @@ class Webhooks
             throw new Failure('invalid_signature');
         }
         $event = json_decode($raw, true, 48, JSON_BIGINT_AS_STRING);
-        if (!is_array($event) || !isset($event['id'], $event['type'], $event['organization_id']) || !is_string($event['type'])) {
+        if (!is_array($event) || !isset($event['id'], $event['type'], $event['organization_id'])
+            || !is_string($event['id']) || !preg_match('/^[A-Za-z0-9_.:-]{1,255}$/D', $event['id'])
+            || !is_string($event['organization_id']) || !preg_match('/^[A-Za-z0-9_.:-]{1,255}$/D', $event['organization_id'])
+            || !is_string($event['type']) || !preg_match('/^[a-z][a-z0-9_.]{1,99}$/D', $event['type'])
+            || (isset($event['created_at']) && (!is_string($event['created_at']) || strlen($event['created_at']) > 40))) {
             // Authentication succeeded, but attribution cannot be established. Retain a
             // digest-only quarantine under the signing scope; never process its money.
             $signingScope = $verified[0][0];
@@ -103,7 +107,7 @@ class Webhooks
                 $normalized['customer_id'] = Ids::opaque($customerId);
                 foreach (array('card_brand','card_last4','card_exp_month','card_exp_year','is_default') as $k) {
                     if (isset($data[$k]) && is_scalar($data[$k])) {
-                        $normalized[$k] = substr((string)$data[$k], 0, 32);
+                        $normalized[$k] = \Bachs\Whmcs\Infrastructure\SafeData::shortText((string)$data[$k], 32);
                     }
                 }
             }
@@ -137,6 +141,9 @@ class Webhooks
         if ($event['state'] === 'processed') {
             return;
         }
+        if ($event['state'] !== 'received') {
+            throw new Failure('authenticated_event_required');
+        }
         $type = $event['data']['type'];
         $d = $event['data']['payload'];
         $scope = $a->settings->scope($event['scope']);
@@ -160,7 +167,8 @@ class Webhooks
                     if (!isset($resource['reference'], $resource['metadata']['attempt_id']) || $resource['reference'] !== $attempt['data']['reference'] || $resource['metadata']['attempt_id'] !== $attempt['id']) {
                         throw new Failure('response_loss_correlation_failed');
                     }
-                    $attempt = $a->store->update('attempts', $attempt['id'], array('checkout_id' => $d['checkout_id']), 'pending', array('provider_hash' => hash('sha256', $d['checkout_id'])));
+                    $attempt = $a->store->update('attempts', $attempt['id'], array('checkout_id' => $d['checkout_id']), 'pending',
+                        array('provider_hash' => hash('sha256', $d['checkout_id'])), array('creating','outcome_unknown','pending'));
                 }
             }
             if (!$attempt) {

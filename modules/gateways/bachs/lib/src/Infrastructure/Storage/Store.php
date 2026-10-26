@@ -104,35 +104,57 @@ class Store implements \Bachs\Whmcs\Domain\LockManager
         return $row ? $this->update($table, $row['id'], $data, $state, $columns) : $this->insert($table, $scope, $key, $data, $state, $columns);
     }
 
-    public function update($table, $id, array $data, $state = null, array $columns = array())
+    public function update($table, $id, array $data, $state = null, array $columns = array(), $fromStates = null)
     {
-        $row = $this->get($table, $id);
-        if (!$row) {
-            throw new Failure('record_not_found');
+        $name = $this->table($table);
+        if ($fromStates !== null && (!is_array($fromStates) || !$fromStates)) {
+            throw new Failure('invalid_transition');
         }
-        $merged = array_merge($row['data'], $data);
-        $json = json_encode($merged);
-        if ($json === false) {
-            throw new Failure('json_encoding_failed');
-        }
-        $values = array('data' => $json, 'updated_at' => $this->clock->now());
-        if ($state !== null) {
-            $values['state'] = $state;
-        }
-        foreach ($columns as $k => $v) {
-            if (!in_array($k, array('provider_hash', 'client_id', 'invoice_id', 'next_run', 'lease_token', 'lease_until'), true)) {
+        foreach ($columns as $key => $value) {
+            if (!in_array($key, array('provider_hash', 'client_id', 'invoice_id', 'next_run', 'lease_token', 'lease_until'), true)) {
                 throw new Failure('invalid_column');
             }
-            $values[$k] = $v;
         }
-        $set = array();
-        foreach ($values as $k => $v) {
-            $set[] = $k . '=?';
+        for ($try = 0; $try < 10; ++$try) {
+            $raw = $this->run('SELECT * FROM ' . $name . ' WHERE id=?', array($id))->fetch(\PDO::FETCH_ASSOC);
+            $row = $this->decode($raw);
+            if (!$row) { throw new Failure('record_not_found'); }
+            if ($fromStates !== null && !in_array($row['state'], $fromStates, true)) { return $row; }
+            $values = array('updated_at' => $this->clock->now());
+            if ($data) {
+                $json = json_encode(array_merge($row['data'], $data));
+                if ($json === false) { throw new Failure('json_encoding_failed'); }
+                $values['data'] = $json;
+            }
+            if ($state !== null) { $values['state'] = $state; }
+            $values = array_merge($values, $columns);
+            $set = array();
+            foreach ($values as $key => $value) { $set[] = $key . '=?'; }
+            $args = array_values($values);
+            $args[] = $id;
+            $where = ' WHERE id=?';
+            if ($data) {
+                // Match the original bytes before replacing merged JSON. A
+                // concurrent writer makes us re-read and merge instead of
+                // restoring old credentials or discarding new payment fields.
+                $where .= $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME) === 'mysql' ? ' AND BINARY data=?' : ' AND data=?';
+                $args[] = $raw['data'];
+            }
+            if ($fromStates !== null) {
+                $where .= ' AND state IN (' . implode(',', array_fill(0, count($fromStates), '?')) . ')';
+                $args = array_merge($args, array_values($fromStates));
+            }
+            $changed = $this->run('UPDATE ' . $name . ' SET ' . implode(',', $set) . $where, $args)->rowCount();
+            $fresh = $this->get($table, $id);
+            if ($changed || !$data) { return $fresh; }
+            // MySQL reports zero affected rows for an unchanged write too.
+            $same = isset($values['data']) && json_encode($fresh['data']) === $values['data'];
+            foreach ($values as $key => $value) {
+                if ($key !== 'data' && (string)$fresh[$key] !== (string)$value) { $same = false; }
+            }
+            if ($same) { return $fresh; }
         }
-        $args = array_values($values);
-        $args[] = $id;
-        $this->run('UPDATE ' . $this->table($table) . ' SET ' . implode(',', $set) . ' WHERE id=?', $args);
-        return $this->get($table, $id);
+        throw new Failure('operation_in_progress');
     }
 
     public function listing($table, array $filters = array(), $limit = 50, $offset = 0)

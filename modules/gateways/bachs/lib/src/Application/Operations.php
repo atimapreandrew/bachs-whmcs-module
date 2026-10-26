@@ -43,6 +43,9 @@ class Operations
         $token = $this->store->acquire($lock);
         try {
             $operation = $this->store->get('operations', $operation['id']);
+            if (!$operation || $operation['scope'] !== $scope['id']) {
+                throw new Failure('operation_scope_mismatch');
+            }
             $data = $operation['data'];
             if ($operation['state'] === 'succeeded') {
                 return json_decode($this->secrets->open($data['response']), true);
@@ -59,14 +62,26 @@ class Operations
             if ($operation['next_run'] > $this->store->clock->now()) {
                 throw new Failure('provider_backoff');
             }
+            $request = $this->secrets->open($data['request']);
+            $body = json_decode($request, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !hash_equals($data['body_hash'], hash('sha256', $request))) {
+                throw new Failure('operation_body_corrupt');
+            }
             $this->store->update('operations', $operation['id'], array(), 'sending');
             try {
-                $response = $provider->request($data['method'], $data['path'], json_decode($this->secrets->open($data['request']), true), $data['idempotency_key']);
-                $this->store->update('operations', $operation['id'], array('response' => $this->secrets->seal(json_encode($response)),
+                $response = $provider->request($data['method'], $data['path'], $body, $data['idempotency_key']);
+                $encoded = json_encode($response);
+                if ($encoded === false) { throw new Failure('invalid_operation_response'); }
+                $this->store->update('operations', $operation['id'], array('response' => $this->secrets->seal($encoded),
                     'request_id' => isset($provider->lastRequestId) ? $provider->lastRequestId : ''), 'succeeded');
                 return $response;
             } catch (ApiFailure $e) {
                 $state = $e->unknown ? 'outcome_unknown' : 'rejected';
+                // Rejection of a retry does not establish the result of the
+                // original request that Bachs already reported as in flight.
+                if ($operation['state'] === 'retryable' && $state === 'rejected') {
+                    $state = 'outcome_unknown';
+                }
                 if ($e->reason === 'IDEMPOTENCY_IN_PROGRESS') {
                     $state = 'retryable';
                 }

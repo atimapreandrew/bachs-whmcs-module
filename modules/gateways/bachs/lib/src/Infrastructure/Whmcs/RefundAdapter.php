@@ -26,6 +26,7 @@ class RefundAdapter
             if (
                 (int)$existing['invoiceid'] !== (int)$refund['invoice_id'] || (int)$existing['userid'] !== (int)$refund['client_id'] ||
                 $existing['gateway'] !== $payment['data']['gateway'] || Money::compare($existing['amountout'], $refund['data']['amount']) !== 0 ||
+                Money::compare($existing['amountin'], '0') !== 0 ||
                 (int)$existing['refundid'] !== (int)$payment['data']['native_id']
             ) {
                 throw new Failure('native_refund_linkage_conflict');

@@ -25,6 +25,9 @@ final class Urls
 
     public static function system($url)
     {
+        if (!is_string($url) || strlen($url) > 4096 || strpos($url, '\\') !== false) {
+            throw new Failure('https_system_url_required');
+        }
         $parts = parse_url($url);
         if (
             !$parts || !isset($parts['scheme'], $parts['host']) || $parts['scheme'] !== 'https' ||

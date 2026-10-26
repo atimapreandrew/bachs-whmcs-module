@@ -12,7 +12,7 @@ class AdminView
     private $scope;
     private $allowed = array();
     private static $pages = array('overview' => 'Status', 'payments' => 'Payments', 'refunds' => 'Refunds', 'saved' => 'Saved cards',
-        'webhooks' => 'Webhooks and jobs', 'reconciliation' => 'Review', 'diagnostics' => 'Diagnostics', 'audit' => 'Audit');
+        'webhooks' => 'Webhooks', 'jobs' => 'Background jobs', 'reconciliation' => 'Review', 'diagnostics' => 'Diagnostics', 'audit' => 'Audit');
 
     public function __construct($app, $link)
     {
@@ -101,7 +101,7 @@ class AdminView
         } elseif ($page === 'diagnostics') {
             $s .= $this->diagnostics();
         } else {
-            $tables = array('payments' => 'payments', 'refunds' => 'refunds', 'saved' => 'payment_methods', 'reconciliation' => 'reconciliation_items', 'audit' => 'audit_log');
+            $tables = array('payments' => 'payments', 'refunds' => 'refunds', 'saved' => 'payment_methods', 'jobs' => 'jobs', 'reconciliation' => 'reconciliation_items', 'audit' => 'audit_log');
             $s .= $this->table($tables[$page]);
         }
         $s .= '</div></div>';
@@ -161,7 +161,7 @@ class AdminView
             $s .= '<p>' . ($saved ? 'A signing secret is saved.' : 'Set the webhook signing secret in Payment Gateways > Bachs.') . '</p>';
 
         }
-        return $s . $this->table('webhook_events') . $this->table('jobs', 10, false);
+        return $s . $this->table('webhook_events');
     }
 
     private function diagnostics()
@@ -228,6 +228,8 @@ class AdminView
                 if ($row['state'] === 'posted' && $this->can('request_refunds')) {
                     $s .= '<h3>Request a refund</h3><p>Only one nonfailed refund is allowed, including a partial refund.</p>' . $this->form('refund_preview', array('target' => $row['id'], 'scope_id' => $row['scope']), $this->input('amount', 'Invoice currency amount', 'text', $d['amount']) . $this->input('reason', 'Reason') . $this->input('refund_address', 'Verified crypto address (crypto only)') . $this->input('network', 'Verified asset / network currency (crypto only)'), 'Review refund');
                 }
+            } elseif ($table === 'jobs' && in_array($row['state'], array('dead','retry'), true) && $this->can('manage_webhooks')) {
+                $s .= $this->form('retry_job', array('target' => $row['id'], 'scope_id' => $row['scope']), '', 'Retry existing job');
             } elseif ($table === 'webhook_events' && $this->can('manage_webhooks')) {
                 $s .= $this->form('replay', array('target' => $row['id'], 'scope_id' => $row['scope']), '', 'Replay verified event');
             } elseif ($table === 'refunds' && $this->can('finalize_refund_accounting')) {
@@ -270,7 +272,7 @@ class AdminView
             return '[depth limit]';
         }
         if (!is_array($data)) {
-            return is_string($data) ? substr($data, 0, 20000) : $data;
+            return is_string($data) ? SafeData::shortText($data, 20000) : $data;
         }
         $out = array();
         foreach ($data as $k => $v) {
@@ -283,7 +285,7 @@ class AdminView
                 $out[$k] = '[protected]';
                 continue;
             }
-            $out[$k] = is_array($v) ? self::display($v, $depth + 1) : (is_string($v) ? substr($v, 0, 20000) : $v);
+            $out[$k] = is_array($v) ? self::display($v, $depth + 1) : (is_string($v) ? SafeData::shortText($v, 20000) : $v);
         }
         return $out;
     }

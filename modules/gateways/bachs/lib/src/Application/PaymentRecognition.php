@@ -19,6 +19,17 @@ class PaymentRecognition
 
     public function reconcile($attemptId, $paymentHint = null)
     {
+        $lock = 'recognize:' . $attemptId;
+        $lease = $this->app->store->acquire($lock);
+        try {
+            return $this->reconcileLocked($attemptId, $paymentHint);
+        } finally {
+            $this->app->store->release($lock, $lease);
+        }
+    }
+
+    private function reconcileLocked($attemptId, $paymentHint)
+    {
         $a = $this->app;
         $attempt = $a->store->get('attempts', $attemptId);
         if (!$attempt) {
@@ -45,11 +56,11 @@ class PaymentRecognition
                     return $this->hold($attempt, 'setup_customer_mismatch');
                 }
                 if (isset($checkout['status']) && $checkout['status'] === 'completed') {
-                    $a->store->update('attempts', $attemptId, array(), 'setup_completed');
+                    $a->store->update('attempts', $attemptId, array(), 'setup_completed', array(), array('creating','open','pending','outcome_unknown','review'));
                     return 'terminal';
                 }
                 if (isset($checkout['status']) && in_array($checkout['status'], array('expired','cancelled'), true)) {
-                    $a->store->update('attempts', $attemptId, array(), $checkout['status'] === 'expired' ? 'expired_verified' : 'cancelled_verified');
+                    $a->store->update('attempts', $attemptId, array(), $checkout['status'] === 'expired' ? 'expired_verified' : 'cancelled_verified', array(), array('creating','open','pending','outcome_unknown','review'));
                     return 'terminal';
                 }
                 return 'pending';
@@ -59,7 +70,7 @@ class PaymentRecognition
             }
             if (!$paymentId) {
                 if (isset($checkout['status']) && in_array($checkout['status'], array('expired', 'cancelled'), true)) {
-                    $a->store->update('attempts', $attemptId, array(), $checkout['status'] === 'expired' ? 'expired_verified' : 'cancelled_verified');
+                    $a->store->update('attempts', $attemptId, array(), $checkout['status'] === 'expired' ? 'expired_verified' : 'cancelled_verified', array(), array('creating','open','pending','outcome_unknown','review'));
                     return 'terminal';
                 }
                 if (isset($checkout['status']) && $checkout['status'] === 'completed') {
@@ -83,7 +94,7 @@ class PaymentRecognition
             return $this->hold($attempt, 'payment_identity_mismatch');
         }
         $payment = $provider->request('GET', '/v1/payments/' . rawurlencode($paymentId));
-        if (!isset($payment['payment_id'], $payment['status']) || $payment['payment_id'] !== $paymentId) {
+        if (!isset($payment['payment_id'], $payment['status']) || !is_string($payment['status']) || $payment['payment_id'] !== $paymentId) {
             return $this->hold($attempt, 'payment_identity_mismatch');
         }
         if (!isset($payment['reference']) || $payment['reference'] !== $d['reference']) {
@@ -110,7 +121,7 @@ class PaymentRecognition
         }
         if (in_array($payment['status'], array('failed','expired','cancelled'), true)) {
             // Only documented terminal REST states, never a collection.failed event alone.
-            $a->store->update('attempts', $attemptId, array('payment_id' => $paymentId), 'failed');
+            $a->store->update('attempts', $attemptId, array('payment_id' => $paymentId), 'failed', array(), array('creating','open','pending','outcome_unknown','review','failed','expired_verified','cancelled_verified'));
             return 'terminal';
         }
         $receipt = $a->store->insert('payments', $scope['id'], $paymentId, array('payment_id' => $paymentId,
@@ -160,6 +171,9 @@ class PaymentRecognition
             }
             $expectedGross = $d['amount'];
             $fee = '0.00';
+            if (isset($payment['fee_paid_by']) && !in_array($payment['fee_paid_by'], array('merchant', 'customer'), true)) {
+                return $this->hold($attempt, 'fee_bearer_unproven', $receipt);
+            }
             if (!$converted && isset($payment['fee_paid_by']) && $payment['fee_paid_by'] === 'customer') {
                 if (!isset($payment['fees']['amount'], $payment['fees']['currency']) || $payment['fees']['currency'] !== $d['currency']) {
                     return $this->hold($attempt, 'fee_currency_unproven', $receipt);
@@ -167,6 +181,9 @@ class PaymentRecognition
                 $expectedGross = Money::add($d['amount'], $payment['fees']['amount'], $precision);
             } elseif (!$converted && isset($payment['fees']['currency'], $payment['fees']['amount']) && $payment['fees']['currency'] === $d['currency']) {
                 $fee = Money::normalize($payment['fees']['amount'], $precision);
+                if (Money::compare($fee, $gross, $precision) > 0) {
+                    return $this->hold($attempt, 'fee_exceeds_collection', $receipt);
+                }
             }
             if (!$converted && Money::compare($gross, $expectedGross, $precision) !== 0) {
                 return $this->hold($attempt, 'invoice_amount_mismatch', $receipt);
@@ -239,10 +256,10 @@ class PaymentRecognition
         $a = $this->app;
         $a->store->exception($attempt['scope'], $reason, $attempt['id'], array('payment_id' => $receipt ? $receipt['data']['payment_id'] : null));
         if ($attempt['state'] !== 'posted') {
-            $a->store->update('attempts', $attempt['id'], array('reason_code' => $reason), 'review');
+            $a->store->update('attempts', $attempt['id'], array('reason_code' => $reason), 'review', array(), array('creating','open','pending','outcome_unknown','review','failed','expired_verified','cancelled_verified'));
         }
         if ($receipt && $receipt['state'] !== 'posted') {
-            $a->store->update('payments', $receipt['id'], array('reason_code' => $reason), 'review');
+            $a->store->update('payments', $receipt['id'], array('reason_code' => $reason), 'review', array(), array('verified','posting','review'));
         }
         return 'review';
     }

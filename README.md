@@ -47,4 +47,4 @@ Payment methods include USD/NGN cards, NGN bank transfer, nine mobile-money corr
 
 ## Support
 
-Read [Contributing](CONTRIBUTING.md), the [developer guide](docs/development.md) and [Security](SECURITY.md). Report ordinary bugs in [GitHub Issues](https://github.com/atimapreandrew/bachs-whmcs-module/issues), including your versions and reproduction steps. Keep keys, customer records, card tokens and raw webhooks private.
+Read [Contributing](CONTRIBUTING.md), the [developer guide](docs/development.md), the [code audit](docs/audit.md) and [Security](SECURITY.md). Report ordinary bugs in [GitHub Issues](https://github.com/atimapreandrew/bachs-whmcs-module/issues), including your versions and reproduction steps. Keep keys, customer records, card tokens and raw webhooks private.

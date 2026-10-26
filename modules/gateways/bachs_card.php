@@ -66,3 +66,30 @@ function bachs_card_remoteupdate($params)
     // Bachs does not document editing an existing card token in place.
     return '<div class="alert alert-info" role="status">To change a Bachs card, add a new payment method, then remove the old one. Existing cards cannot be edited here.</div>';
 }
+
+// WHMCS calls storeremote when a native remote Pay Method is removed.
+// Card entry and replacement continue through the hosted remote-input flow.
+function bachs_card_storeremote($params)
+{
+    if (!isset($params['action']) || $params['action'] !== 'delete') {
+        return array('status' => 'error', 'rawdata' => array('error_code' => 'use_hosted_card_entry'));
+    }
+    try {
+        require_once __DIR__ . '/bachs/bootstrap.php';
+        $app = \Bachs\Whmcs\Infrastructure\Whmcs\Runtime::app(false);
+        $token = isset($params['gatewayid']) && is_string($params['gatewayid']) ? $params['gatewayid'] : '';
+        $clientId = isset($params['clientdetails']['userid']) ? $params['clientdetails']['userid'] : null;
+        if (!is_scalar($clientId) || !ctype_digit((string)$clientId) || (int)$clientId < 1 || !preg_match('/^[a-f0-9]{48}$/D', $token)) {
+            throw new \Bachs\Whmcs\Domain\Failure('saved_method_access_denied');
+        }
+        (new \Bachs\Whmcs\Application\SavedMethods($app))->revoke($token, (int)$clientId);
+        return array('status' => 'success', 'rawdata' => array('local_consent' => 'revoked'));
+    } catch (Throwable $error) {
+        $reporter = __DIR__ . '/bachs/lib/src/Infrastructure/Diagnostics.php';
+        if (is_file($reporter)) {
+            require_once $reporter;
+            \Bachs\Whmcs\Infrastructure\Diagnostics::report($error, 'native_card_delete');
+        }
+        return array('status' => 'error', 'rawdata' => array('error_code' => 'card_removal_failed'));
+    }
+}

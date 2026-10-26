@@ -25,19 +25,19 @@ class Customers
             if ($mapped && $mapped['state'] === 'active') {
                 return $mapped['data']['customer_id'];
             }
-            $op = $this->operations->prepare(
-                $scope,
-                'customer:' . $client['client_id'],
-                'POST',
-                '/v1/customers',
-                array('email' => $client['email'], 'name' => $client['name'],
-                'metadata' => array('integration' => 'whmcs',
-                'installation_id' => $scope['data']['installation'],
-                'client_reference' => hash(
-                    'sha256',
-                    $scope['id'] . ':' . $client['client_id']
-                )))
-            );
+            $index = $this->store->find('settings', $scope['id'], 'customer_operation:' . $client['client_id']);
+            $op = $index ? $this->store->get('operations', $index['data']['operation_id'])
+                : $this->store->find('operations', $scope['id'], 'customer:' . $client['client_id']);
+            if (!$op || $op['state'] === 'rejected') {
+                $identity = 'customer:' . $client['client_id'] . ($op ? ':' . Ids::random() : '');
+                $op = $this->operations->prepare($scope, $identity, 'POST', '/v1/customers', array(
+                    'email' => $client['email'], 'name' => $client['name'],
+                    'metadata' => array('integration' => 'whmcs', 'installation_id' => $scope['data']['installation'],
+                        'client_reference' => hash('sha256', $scope['id'] . ':' . $client['client_id']))));
+                $this->store->put('settings', $scope['id'], 'customer_operation:' . $client['client_id'], array('operation_id' => $op['id']), 'index');
+            }
+            // Reuse the frozen request even when the billing name/email changed
+            // after Bachs succeeded but the local mapping was interrupted.
             $response = $this->operations->send($op, $scope, $provider);
             if (!isset($response['customer_id'])) {
                 throw new Failure('customer_contract_mismatch');

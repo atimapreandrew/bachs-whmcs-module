@@ -15,6 +15,7 @@ class SignatureVerifier
 
     public function verify($raw, array $headers, array $secrets)
     {
+        if (!is_string($raw)) { throw new Failure('invalid_signature'); }
         if (strlen($raw) > 1048576) {
             throw new Failure('webhook_too_large');
         }
@@ -22,7 +23,7 @@ class SignatureVerifier
         $timestamp = null;
         $signatures = array();
         if (isset($headers['x-bachs-signature-v2'])) {
-            if (strlen($headers['x-bachs-signature-v2']) > 2048) {
+            if (!is_string($headers['x-bachs-signature-v2']) || strlen($headers['x-bachs-signature-v2']) > 2048) {
                 throw new Failure('invalid_signature');
             }
             foreach (explode(',', $headers['x-bachs-signature-v2']) as $part) {

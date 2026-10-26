@@ -31,8 +31,12 @@ try {
     echo '{"received":true}';
 } catch (\Bachs\Whmcs\Domain\Failure $e) {
     $safe = array('invalid_signature' => 401, 'invalid_environment' => 400, 'event_scope_mismatch' => 403, 'webhook_too_large' => 413, 'event_identity_collision' => 409, 'malformed_signed_event' => 400, 'rate_limited' => 429);
-    http_response_code(isset($safe[$e->reason]) ? $safe[$e->reason] : 503);
-    echo json_encode(array('error' => isset($safe[$e->reason]) ? $e->reason : 'storage_unavailable'));
+    if (isset($safe[$e->reason])) {
+        http_response_code($safe[$e->reason]);
+        echo json_encode(array('error' => $e->reason));
+    } else {
+        \Bachs\Whmcs\Infrastructure\Diagnostics::unavailable($e, 'webhook_storage', true);
+    }
 } catch (Throwable $e) {
     require_once dirname(__DIR__) . '/bachs/lib/src/Infrastructure/Diagnostics.php';
     \Bachs\Whmcs\Infrastructure\Diagnostics::unavailable($e, 'webhook_startup', true);

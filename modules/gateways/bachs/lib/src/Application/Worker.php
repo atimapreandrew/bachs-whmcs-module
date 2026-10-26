@@ -101,13 +101,16 @@ class Worker
             if (!$attempt) {
                 return false;
             }
+            if (empty($attempt['data']['operation_id']) && empty($attempt['data']['checkout_id']) && empty($attempt['data']['payment_id']) && $attempt['state'] === 'creating') {
+                $attempt = $this->recoverPreparation($attempt);
+            }
             if (in_array($attempt['state'], array('posted','failed','setup_completed','expired_verified','cancelled_verified'), true)) {
                 return false;
             }
             if (!empty($attempt['data']['operation_id']) && empty($attempt['data']['checkout_id']) && empty($attempt['data']['payment_id'])) {
                 $op = $a->store->get('operations', $attempt['data']['operation_id']);
                 if ($op && $op['state'] === 'rejected') {
-                    $a->store->update('attempts', $id, array(), 'failed');
+                    $a->store->update('attempts', $id, array(), 'failed', array(), array('creating','outcome_unknown'));
                     return false;
                 }
                 $response = null;
@@ -125,7 +128,7 @@ class Worker
                     if (isset($response['checkout_id'])) {
                         (new Checkout($a))->accept($attempt, $response);
                     } elseif (isset($response['payment_id'])) {
-                        $a->store->update('attempts', $id, array('payment_id' => \Bachs\Whmcs\Domain\Ids::opaque($response['payment_id'])), 'pending');
+                        $a->store->update('attempts', $id, array('payment_id' => \Bachs\Whmcs\Domain\Ids::opaque($response['payment_id'])), 'pending', array(), array('creating','outcome_unknown','pending'));
                     } else {
                         throw new Failure('payment_operation_contract_mismatch');
                     }
@@ -153,6 +156,30 @@ class Worker
             return false;
         }
         throw new Failure('unknown_job_type');
+    }
+
+    private function recoverPreparation($attempt)
+    {
+        $a = $this->app;
+        $purpose = $attempt['data']['purpose'];
+        $lock = $purpose === 'setup' ? 'card_setup:' . $attempt['scope'] . ':' . $attempt['client_id'] : 'invoice:' . $attempt['invoice_id'];
+        $lease = $a->store->acquire($lock);
+        try {
+            $attempt = $a->store->get('attempts', $attempt['id']);
+            if ($attempt['state'] !== 'creating' || !empty($attempt['data']['operation_id']) || !empty($attempt['data']['checkout_id']) || !empty($attempt['data']['payment_id'])) {
+                return $attempt;
+            }
+            $prefix = $purpose === 'invoice' ? 'checkout' : $purpose;
+            $operation = $a->store->find('operations', $attempt['scope'], $prefix . ':' . $attempt['id']);
+            if ($operation) {
+                return $a->store->update('attempts', $attempt['id'], array('operation_id' => $operation['id']));
+            }
+            // The initiation lease is free and no durable request exists, so
+            // this attempt stopped before it could reach the provider.
+            return $a->store->update('attempts', $attempt['id'], array('reason_code' => 'preparation_interrupted'), 'failed', array(), array('creating'));
+        } finally {
+            $a->store->release($lock, $lease);
+        }
     }
 
     /** Resume only unsent requests or an explicit provider idempotency retry. */

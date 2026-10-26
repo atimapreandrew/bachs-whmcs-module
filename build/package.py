@@ -20,7 +20,7 @@ def assemble():
     for name in ('README.md','CHANGELOG.md','CONTRIBUTING.md','SECURITY.md','LICENSE.txt'):
         shutil.copy2(ROOT / name, base / name)
     (base / 'docs').mkdir()
-    for name in ('installation.md', 'development.md'):
+    for name in ('installation.md', 'development.md', 'audit.md'):
         shutil.copy2(ROOT / 'docs' / name, base / 'docs' / name)
     components = {str(p.relative_to(target)): digest(p) for p in files(target) if p.suffix == '.php' and library not in p.parents and not str(p.relative_to(target)).startswith('modules/addons/')}
     manifest = dict(

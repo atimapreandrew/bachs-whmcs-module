@@ -39,6 +39,9 @@ add_hook('ClientAreaFooterOutput', 1, function ($vars) {
     if (!in_array($file, array('viewinvoice', 'clientarea', 'index'), true)) {
         return '';
     }
+    $methodsPage = (isset($_GET['rp']) && is_string($_GET['rp']) && trim($_GET['rp'], '/') === 'account/paymentmethods')
+        || (isset($vars['templatefile']) && $vars['templatefile'] === 'account-paymentmethods');
+    if ($file !== 'viewinvoice' && !$methodsPage) { return ''; }
     try {
         if (!bachs_hook_active()) {
             return '';

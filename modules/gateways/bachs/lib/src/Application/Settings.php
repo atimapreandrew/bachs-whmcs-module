@@ -62,7 +62,11 @@ class Settings
 
     public function provider($scope)
     {
-        return new \Bachs\Whmcs\Infrastructure\Bachs\Client($scope['data']['environment'], $this->secret('key_' . $scope['id']), $scope['data']['account']);
+        $key = $this->secret('key_' . $scope['id']);
+        if (!hash_equals($scope['data']['generation'], hash('sha256', $key))) {
+            throw new Failure('credential_rotated_reconcile');
+        }
+        return new \Bachs\Whmcs\Infrastructure\Bachs\Client($scope['data']['environment'], $key, $scope['data']['account']);
     }
 
     public function assertEnvironment($environment)

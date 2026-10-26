@@ -106,7 +106,7 @@ class Checkout
                 $response = $a->operations->send($op, $scope, $provider);
             } catch (\Throwable $e) {
                 $saved = $a->store->get('operations', $op['id']);
-                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown');
+                $a->store->update('attempts', $attempt['id'], array(), $saved['state'] === 'rejected' ? 'failed' : 'outcome_unknown', array(), array('creating','outcome_unknown'));
                 throw $e;
             }
             return $this->presentation($this->accept($attempt, $response));
@@ -118,6 +118,14 @@ class Checkout
     public function accept($attempt, array $response)
     {
         $a = $this->app;
+        $current = $a->store->get('attempts', $attempt['id']);
+        if (!$current) {
+            throw new Failure('attempt_not_found');
+        }
+        if (in_array($current['state'], array('posted', 'setup_completed', 'failed', 'expired_verified', 'cancelled_verified', 'review'), true)) {
+            return $current;
+        }
+        $attempt = $current;
         if (!isset($response['checkout_id'], $response['checkout_url']) || !isset($response['status']) || $response['status'] !== 'open') {
             throw new Failure('checkout_contract_mismatch');
         }
@@ -130,7 +138,8 @@ class Checkout
             'checkout_url' => $a->settings->secrets->seal($url),
             'payment_methods' => isset($response['payment_methods']) && is_array($response['payment_methods']) ? $response['payment_methods'] : array()),
             'open',
-            array('provider_hash' => hash('sha256', $checkout))
+            array('provider_hash' => hash('sha256', $checkout)),
+            array('creating', 'outcome_unknown', 'open', 'pending')
         );
     }
 

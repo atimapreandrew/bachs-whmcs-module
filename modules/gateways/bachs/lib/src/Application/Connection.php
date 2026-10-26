@@ -10,10 +10,12 @@ use Bachs\Whmcs\Infrastructure\Bachs\Client;
 class Connection
 {
     private $app;
+    private $factory;
 
-    public function __construct(Engine $app)
+    public function __construct(Engine $app, $factory = null)
     {
         $this->app = $app;
+        $this->factory = $factory;
     }
 
     public function connect($environment, $key, $actor)
@@ -27,7 +29,7 @@ class Connection
             }
             $key = $a->settings->secret('key_' . $id);
         }
-        $provider = new Client($environment, $key, $account);
+        $provider = $this->factory ? call_user_func($this->factory, $environment, $key) : new Client($environment, $key, $account);
         $me = $provider->request('GET', '/v1/accounts/me');
         if (empty($me['id'])) {
             throw new Failure('merchant_contract_mismatch');
@@ -44,19 +46,20 @@ class Connection
             $a->settings->set('installation_id', $installation);
         }
         $scopeKey = Scope::id($installation, $environment, $organization, $account);
-        $scope = $a->store->find('merchant_scopes', '', $scopeKey);
         $generation = hash('sha256', $key);
-        if ($scope && $scope['data']['generation'] !== $generation) {
-            $a->settings->saveSecret('generation_' . $scope['id'] . '_' . $scope['data']['generation'], $a->settings->secret('key_' . $scope['id']));
-        }
-        $scope = $a->store->put('merchant_scopes', '', $scopeKey, array('installation' => $installation,
-            'environment' => $environment, 'organization' => $organization, 'account' => $account, 'generation' => $generation,
-            'verified_at' => $a->store->clock->now(), 'name' => isset($me['name']) ? substr($me['name'], 0, 128) : 'Merchant',
-            ), 'bound');
-        $a->settings->saveSecret('key_' . $scope['id'], $key);
-        $a->settings->set('scope_' . $environment, $scope['id']);
-        $a->store->audit($actor, 'merchant_connection_verified', $scope['id'], $scope['id'], array('environment' => $environment));
-        return $scope;
+        // Encrypt before changing the credential fingerprint. A failed encryption
+        // or database write must leave the old scope and key together.
+        $sealed = $a->settings->secrets->seal($key);
+        $name = isset($me['name']) ? \Bachs\Whmcs\Infrastructure\SafeData::shortText($me['name'], 128) : 'Merchant';
+        return $a->store->atomic(function () use ($a, $scopeKey, $installation, $environment, $organization, $account, $generation, $sealed, $name, $actor) {
+            $scope = $a->store->put('merchant_scopes', '', $scopeKey, array('installation' => $installation,
+                'environment' => $environment, 'organization' => $organization, 'account' => $account, 'generation' => $generation,
+                'verified_at' => $a->store->clock->now(), 'name' => $name), 'bound');
+            $a->settings->set('key_' . $scope['id'], $sealed);
+            $a->settings->set('scope_' . $environment, $scope['id']);
+            $a->store->audit($actor, 'merchant_connection_verified', $scope['id'], $scope['id'], array('environment' => $environment));
+            return $scope;
+        });
     }
 
     public function save(array $input, $actor)
