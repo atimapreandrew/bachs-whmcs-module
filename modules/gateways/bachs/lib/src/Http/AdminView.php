@@ -141,6 +141,7 @@ class AdminView
         $s .= '<dt>New payments</dt><dd>' . ($a->settings->get('draining', false) ? 'Maintenance mode' : ($a->settings->get('enabled', false) ? 'Enabled' : 'Disabled')) . '</dd>';
         $s .= '<dt>Background processing</dt><dd>' . $this->workerHealth() . '</dd></dl>';
         $s .= $this->form('verify', array(), '<p>Save any changes in Payment Gateways before verifying the connection.</p>', 'Verify saved gateway settings');
+        $s .= $this->form('run_checks', array(), '<p>Run a small batch of pending payment and refund checks now. The WHMCS system cron should run these automatically every five minutes.</p>', 'Run payment checks');
         $s .= '<p>Pending payments continue to reconcile when the client leaves. Request refunds from the Payments tab; record a native Record Only refund after Bachs confirms success.</p>';
         return $s;
     }
@@ -293,8 +294,13 @@ class AdminView
     private function workerHealth()
     {
         $last = $this->app->settings->get('last_worker', 0);
-        $fresh = $last && $this->app->store->clock->now() - $last < 900;
-        return '<span class="label ' . ($fresh ? 'label-success' : 'label-warning') . '">' . ($fresh ? 'Worker recently active' : 'Worker needs attention') . '</span>' . ($last ? ' <small>' . $this->h(gmdate('Y-m-d H:i:s', $last)) . ' UTC</small>' : ' <small>Run the CLI worker or configure WHMCS cron.</small>');
+        $fresh = $last && $this->app->store->clock->now() - $last <= 900;
+        $status = '<span class="label ' . ($fresh ? 'label-success' : 'label-warning') . '">' . ($fresh ? 'Worker recently active' : 'Worker needs attention') . '</span>';
+        $status .= $last ? ' <small>Last completed run: ' . $this->h(gmdate('Y-m-d H:i:s', $last)) . ' UTC</small>' : ' <small>No completed run yet.</small>';
+        if (!$fresh) {
+            $status .= '<p>Use Run payment checks below if available. If the timestamp stays unchanged after the next system cron, check the WHMCS Activity Log for Bachs cron_worker errors.</p>';
+        }
+        return $status;
     }
 
     private function form($action, $hidden, $fields, $label)

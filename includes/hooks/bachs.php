@@ -62,7 +62,9 @@ add_hook('ClientAreaFooterOutput', 1, function ($vars) {
 
 add_hook('AfterCronJob', 1, function ($vars) {
     try {
-        (new \Bachs\Whmcs\Application\Worker(bachs_hook_app()))->run();
+        // Bootstrap first: PHP resolves a constructor's class before its arguments.
+        $app = bachs_hook_app();
+        (new \Bachs\Whmcs\Application\Worker($app))->run();
     } catch (Throwable $error) {
         bachs_hook_report($error, 'cron_worker');
     }
@@ -70,7 +72,8 @@ add_hook('AfterCronJob', 1, function ($vars) {
 
 add_hook('DailyCronJob', 1, function ($vars) {
     try {
-        (new \Bachs\Whmcs\Application\Worker(bachs_hook_app()))->cleanup();
+        $app = bachs_hook_app();
+        (new \Bachs\Whmcs\Application\Worker($app))->cleanup();
     } catch (Throwable $error) {
         bachs_hook_report($error, 'cron_cleanup');
     }

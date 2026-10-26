@@ -2,6 +2,50 @@
 
 function add_hook($name, $priority, $callback) { $GLOBALS['bachs_test_hooks'][$name] = $callback; }
 
+function cronStartup($hook, $failure = '')
+{
+    $root = dirname(dirname(__DIR__));
+    $command = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg(dirname(__DIR__) . '/Support/cron-startup.php')
+        . ' ' . escapeshellarg($hook) . ' ' . escapeshellarg($root) . ' ' . escapeshellarg($failure);
+    $lines = array(); $status = 0;
+    exec($command . ' 2>&1', $lines, $status);
+    same(0, $status);
+    $result = json_decode(implode("\n", $lines), true);
+    if (!is_array($result)) { throw new RuntimeException(implode("\n", $lines)); }
+    return $result;
+}
+
+test('WHMCS five-minute cron loads Bachs before creating its worker in a fresh process', function () {
+    $started = time();
+    $result = cronStartup('AfterCronJob');
+    same(false, $result['loaded_before']);
+    same(true, $result['loaded_after']);
+    truth($result['last_worker'] >= $started);
+    same(array(), $result['logs']);
+    same(0, $result['api_calls']);
+    same(1, $result['database_connections']);
+});
+
+test('WHMCS daily cleanup can be the first Bachs hook in a fresh process', function () {
+    $result = cronStartup('DailyCronJob');
+    same(false, $result['loaded_before']);
+    same(true, $result['loaded_after']);
+    same('', $result['cleanup_cursor']);
+    same(0, $result['last_worker']);
+    same(array(), $result['logs']);
+    same(0, $result['api_calls']);
+});
+
+test('Cron startup failure keeps the heartbeat stale and reports a private reference', function () {
+    $result = cronStartup('AfterCronJob', 'database_failure');
+    same(1, $result['database_connections']);
+    same(0, $result['last_worker']);
+    same(1, count($result['logs']));
+    truth(preg_match('/Bachs \[[a-f0-9]{12}\] cron_worker:/', $result['logs'][0]));
+    same(false, strpos(json_encode($result), 'sk_live_private') !== false);
+    same(false, strpos(json_encode($result), 'private database') !== false);
+});
+
 test('WHMCS client deletion clears every saved token and consent beyond the first page', function () {
     require_once dirname(dirname(__DIR__)) . '/includes/hooks/bachs.php';
     list($a, $p, $w, $scope) = environment();

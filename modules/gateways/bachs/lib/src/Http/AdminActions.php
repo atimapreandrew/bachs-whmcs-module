@@ -9,7 +9,7 @@ use Bachs\Whmcs\Domain\Failure;
 class AdminActions
 {
     private $app;
-    public static $permissions = array('verify' => 'manage_settings',
+    public static $permissions = array('verify' => 'manage_settings', 'run_checks' => 'manage_webhooks',
         'replay' => 'manage_webhooks', 'recheck' => 'view_payments', 'refund_preview' => 'request_refunds', 'refund_confirm' => 'request_refunds',
         'refund_recheck' => 'finalize_refund_accounting', 'refund_map' => 'finalize_refund_accounting', 'resolve' => 'view_payments', 'revoke' => 'manage_settings',
         'retry_job' => 'manage_webhooks', 'export' => 'export_diagnostics');
@@ -31,7 +31,7 @@ class AdminActions
         (new RateLimit($a->store))->check('admin:' . $actor['id'], 40);
         $who = $actor['actor'];
         $scope = null;
-        if (!in_array($action, array('verify','export'), true)) {
+        if (!in_array($action, array('verify','run_checks','export'), true)) {
             $scopeId = Input::text($input, 'scope_id', '', 48);
             $scope = $scopeId ? $a->settings->scope($scopeId) : $a->settings->activeScope();
         }
@@ -44,6 +44,12 @@ class AdminActions
                 throw new Failure($error);
             }
             return array('message' => 'Saved gateway settings verified. No money was moved.');
+        }
+        if ($action === 'run_checks') {
+            $result = (new \Bachs\Whmcs\Application\Worker($a))->run(10, 5);
+            $a->store->audit($who, 'payment_checks_run', '', '', $result);
+            return array('message' => 'Payment checks completed. Jobs checked: ' . $result['processed']
+                . '. Keep the WHMCS system cron running every five minutes.');
         }
         if ($action === 'replay') {
             $event = $a->store->get('webhook_events', $target);

@@ -8,6 +8,8 @@
 - Directly installable source folders, lazy gateway discovery and Apps & Integrations metadata.
 - Native WHMCS controls with an optional payment activity addon; no custom stylesheet.
 - Addon startup without global configuration or provider access, with private diagnostic references.
+- Fixed fresh-process cron worker and daily cleanup startup; added protected manual payment checks and clearer worker status.
+- Native sandbox spacing, restored payment button labels after errors, and reliable overlay, retry and browser Back controls.
 - Correct client permission checks for account owners, invited users and Admin Login as Owner.
 - Hosted/overlay checkout, signed webhooks and recoverable payment recognition.
 - All 11 invoice currencies, 13 method corridors and USD checkout conversion.

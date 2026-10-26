@@ -28,15 +28,25 @@ class GatewayView
         }
         $s = '<div data-bachs-payment data-status-url="' . SafeData::html($root . '/status.php') . '" aria-label="Bachs secure checkout">';
         if ($sandbox) {
-            $s .= '<p class="alert alert-warning">Bachs sandbox — test payment</p>';
+            $s .= '<div class="alert alert-warning" role="status">Bachs sandbox — test payment</div>';
         }
         $s .= '<form method="post" action="' . SafeData::html($root . '/checkout.php') . '" data-bachs-form><input type="hidden" name="token" value="' . SafeData::html($token) . '"><input type="hidden" name="invoice_id" value="' . $id . '"><input type="hidden" name="gateway" value="' . $gateway . '">';
         if ($save) {
-            $s .= '<label class="checkbox"><input type="checkbox" name="save_method" value="1"><span>' . SafeData::html(\Bachs\Whmcs\Application\Checkout::consentText()) . '</span></label>';
+            $s .= '<div class="checkbox"><label><input type="checkbox" name="save_method" value="1"> ' . SafeData::html(\Bachs\Whmcs\Application\Checkout::consentText()) . '</label></div>';
         }
-        $s .= '<button class="btn btn-primary" type="submit"><span data-bachs-label>' . SafeData::html($label) . '</span></button></form>';
-        $s .= '<p class="text-info" data-bachs-status role="status" aria-live="polite"></p><a class="btn btn-default" data-bachs-fallback hidden rel="noreferrer">Continue to secure checkout ↗</a></div>';
-        $s .= '<script src="' . SafeData::html($root . '/assets/bachs.js') . '" defer></script>';
+        $s .= '<button class="btn btn-primary" type="submit">' . SafeData::html($label) . '</button></form>';
+        $s .= '<p class="text-info" data-bachs-status role="status" aria-live="polite"></p><p data-bachs-fallback-container hidden><a class="btn btn-default" data-bachs-fallback hidden rel="noreferrer">Continue to secure checkout ↗</a></p></div>';
+        $s .= self::script($app);
         return $s;
+    }
+
+    public static function script($app)
+    {
+        static $revision;
+        if ($revision === null) {
+            $file = dirname(dirname(dirname(__DIR__))) . '/assets/bachs.js';
+            $revision = is_file($file) ? substr(hash_file('sha256', $file), 0, 12) : '1.0.0';
+        }
+        return '<script src="' . SafeData::html($app->bridge->systemUrl() . '/modules/gateways/bachs/assets/bachs.js?v=' . $revision) . '" defer></script>';
     }
 }

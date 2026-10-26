@@ -37,7 +37,7 @@ class Messages
             'refund_rail_not_supported' => 'This payment method requires an externally processed reimbursement.',
             'confirmation_invalid_or_expired' => 'This confirmation expired. Review the current payment details again.',
             'merchant_migration_confirmation_required' => 'This key belongs to a different merchant. Restore the original key and contact the maintainer before changing merchants.',
-            'worker_not_healthy' => 'Run the Bachs CLI worker or WHMCS cron, then enable payments.',
+            'worker_not_healthy' => 'Bachs is temporarily unavailable. Please try again later or contact billing support.',
             'merchant_not_connected' => 'Save your Bachs API key in Payment Gateways > Bachs.',
             'api_key_required' => 'Save the secret API key for the selected environment in Payment Gateways > Bachs.',
             'invalid_gateway_configuration' => 'Review the Bachs gateway settings. Use whole numbers within the ranges shown.',

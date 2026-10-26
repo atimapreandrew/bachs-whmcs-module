@@ -45,7 +45,11 @@ A delivery is acknowledged after it is authenticated and queued. The worker chec
 
 ## Background processing
 
-The included hook uses the existing WHMCS cron. Run cron after configuring the gateway, then check worker status under **Addons → Bachs Payments → Status** when the addon is enabled. New invoice collection waits for a healthy worker.
+The included hook uses the existing WHMCS system cron. Keep that cron running every five minutes, as recommended by WHMCS. No separate Bachs cron is required. Each `AfterCronJob` run checks pending work and updates the last completed run; daily automation also removes expired sensitive links.
+
+After configuring the gateway, wait for the next system cron, then check **Addons → Bachs Payments → Status** when the addon is enabled. The status should show **Worker recently active** with a recent UTC timestamp. New invoice collection stops if no worker run has completed for more than 15 minutes.
+
+Administrators with **Configure Payment Gateways** permission can use **Run payment checks** on the Status page to run a small batch immediately. This checks existing payment and refund work, including receipt posting and previously approved requests. It does not replace the regular cron or change payment settings. Opening the Status page alone does not run checks. An unexpected failure shows a reference for the WHMCS Activity Log.
 
 For faster checks, run the optional CLI worker every minute using your actual paths:
 
@@ -92,6 +96,7 @@ The module uses WHMCS encryption. Back up the WHMCS encryption configuration tog
 - **Gateway missing:** confirm the entry file is directly at `modules/gateways/bachs.php`, refresh All Payment Gateways, and check the WHMCS activity log. The gateway list does not need API credentials or module tables to discover Bachs.
 - **Addon will not open:** check the displayed reference in **Utilities → Logs → Activity Log**. The message identifies missing files, database permissions, staff access or an invalid System URL. Upload the complete ZIP when files do not match. The database user needs permission to create the module tables and indexes on first use.
 - **Settings not applied:** save the native gateway form, then verify the saved configuration. Correct the message shown under Addons > Bachs Payments > Status.
+- **Worker needs attention:** the displayed UTC time is the last completed Bachs run. If WHMCS cron already runs every five minutes, look for `Bachs ... cron_worker` entries in the Activity Log; a scheduled cron can still encounter a Bachs startup error. Earlier packages could report `Error at bachs.php:65` (or line 62) because the hook tried to construct its worker before loading Bachs. Upload the complete current package, wait for the next cron, and reload Status. Use **Run payment checks** for an immediate check. A manual run confirms that request only; verify that the next scheduled cron advances the timestamp too.
 - **Client.php line zero when paying:** upload the complete current package. Client payment access uses the account owner or the signed-in user's invoice permission. Staff Login as Owner is supported; invited users need invoice access for the selected account.
 - **No payment recorded:** check signed deliveries, worker health and the review list. A browser return does not prove payment.
 - **Unknown outcome:** keep the existing request identity and recheck it before trying another payment.

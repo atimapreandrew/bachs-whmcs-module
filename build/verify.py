@@ -40,6 +40,19 @@ def check_addon(path, mode, expected, errors):
         errors.append('Packaged addon startup failed: ' + mode)
 
 
+def check_cron(path, hook, errors):
+    result = subprocess.run(['php', str(ROOT / 'tests/Support/cron-startup.php'), hook, str(path)], capture_output=True, text=True)
+    try:
+        response = json.loads(result.stdout)
+    except ValueError:
+        errors.append('Packaged cron startup returned invalid output: ' + result.stderr)
+        return
+    completed = response['last_worker'] > 0 if hook == 'AfterCronJob' else response['cleanup_cursor'] == ''
+    if (result.returncode or response['loaded_before'] or not response['loaded_after']
+            or response['logs'] or response['api_calls'] != 0 or not completed):
+        errors.append('Packaged cron startup failed: ' + hook)
+
+
 def main():
     errors = []
     archive_name = f'bachs-whmcs-{VERSION}.zip'
@@ -95,6 +108,8 @@ def main():
     check_loader(base / 'bootstrap.php', 'Packaged bootstrap', errors)
     check_addon(DIST / 'whmcs-root', 'empty', 'bachs-payment-tools', errors)
     check_addon(DIST / 'whmcs-root', 'configured', 'bachs-payment-tools', errors)
+    for hook in ('AfterCronJob', 'DailyCronJob'):
+        check_cron(DIST / 'whmcs-root', hook, errors)
 
     # The gateway must also work when the optional operations addon is omitted.
     with tempfile.TemporaryDirectory(prefix='bachs-no-addon-') as temporary:
@@ -102,6 +117,8 @@ def main():
         shutil.copytree(DIST / 'whmcs-root', copied)
         shutil.rmtree(copied / 'modules/addons')
         check_loader(copied / 'modules/gateways/bachs/bootstrap.php', 'Gateway without optional addon', errors)
+        for hook in ('AfterCronJob', 'DailyCronJob'):
+            check_cron(copied, hook, errors)
 
     # Simulate an incomplete upload without touching the real package.
     with tempfile.TemporaryDirectory(prefix='bachs-package-check-') as temporary:
@@ -132,7 +149,7 @@ def main():
     if errors:
         print('\n'.join(errors))
         return 1
-    print(f'Package verified: {len(names)} entries, file hashes, bootstrap, private-file exclusions, and partial-upload guard.')
+    print(f'Package verified: {len(names)} entries, file hashes, fresh cron startup, bootstrap, private-file exclusions, and partial-upload guard.')
     return 0
 
 

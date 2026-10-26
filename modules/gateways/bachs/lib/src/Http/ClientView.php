@@ -68,6 +68,6 @@ class ClientView
                 $content .= '<form method="post" action="' . $h($root . '/manage.php') . '"><input type="hidden" name="token" value="' . $h($token) . '"><input type="hidden" name="action" value="portal"><button class="btn btn-default" type="submit">Manage cards at Bachs</button></form>';
             }
         }
-        return $content ? '<div id="bachs-client-controls">' . $content . '</div><script src="' . $h($root . '/assets/bachs.js') . '" defer></script>' : '';
+        return $content ? '<div id="bachs-client-controls">' . $content . '</div>' . GatewayView::script($app) : '';
     }
 }

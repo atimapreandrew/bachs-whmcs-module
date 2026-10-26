@@ -31,11 +31,14 @@ This review covered the gateway entries, native WHMCS settings and permissions, 
 | Client return and portal | A denied user could be told to log in again; portal creation lacked a request limit. | Return handling distinguishes denied access from logged-out sessions; portal requests are limited. |
 | Text and privacy | Byte truncation could break UTF-8 JSON. Refund previews included unnecessary payer contact/bank data. | Text truncation preserves encoding; previews include only allowed payment fields. |
 | Deployment and diagnostics | An older module could accept a newer schema, and some callback failures lacked a useful reference. | Newer schemas are rejected clearly; private callback diagnostics include a reference. |
+| Cron startup | The hook constructed Worker before its bootstrap argument could register the loader. A fresh cron failed at `bachs.php:65`, leaving the last-run timestamp stale. | Both cron callbacks bootstrap first. Fresh-process source and package tests cover worker and cleanup startup, including operation without the addon. |
 
 ## Validation
 
-- **269 PHP tests, 953 assertions and 7 client behavior tests pass.**
+- **276 PHP tests, 1006 assertions and 16 client behavior tests pass.**
 - The audit added 45 PHP regression/control tests. Forty-two regression scenarios were also run against the earlier release, commit `0840461a43c2f96dc629ef1a1a22331e5300ed1f`, and failed there as expected.
+- The cron repair adds seven tests for fresh worker/cleanup startup, safe startup failure, the protected manual check, status updates and client messaging. All seven failed before the repair. The isolated worker reproduced the reported `cron_worker: unexpected_error; Error at bachs.php:65` before the fix.
+- Checkout UI checks cover theme-replaced labels, server/network errors, invalid responses, timeouts without AbortController, overlay failure/close, stale links and status responses, missing controls and browser Back. Labels and controls recover without creating an automatic replacement payment. Confirmed payment UI still requires a server response.
 - Fault tests cover failed encryption, rolled-back key writes, lost request links/responses, interleaved database writes, late responses and failed refunds with partial settlement.
 - The existing eight-process test still confirms one native posting for one receipt.
 - Gateway discovery, WHMCS version boundaries, addon startup, native permission contracts, syntax, documentation links, secret scanning, package hashes and incomplete-upload checks remain part of release validation.
